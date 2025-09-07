@@ -1,4 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useEffect } from 'react'
+
 import { Button } from '@/components/ui/button'
 import { Camera, Play, Square, AlertCircle, RotateCcw } from 'lucide-react'
 import { useWebcam } from '@/hooks/useWebcam'
@@ -17,6 +19,8 @@ export default function CameraCard({ onPhotoCapture }: CameraCardProps) {
     isLoading,
     error,
     isStreamActive,
+    resolutionMode,
+    setResolutionMode,
     startCamera,
     stopCamera,
     capturePhoto,
@@ -30,6 +34,12 @@ export default function CameraCard({ onPhotoCapture }: CameraCardProps) {
       onPhotoCapture(photoDataUrl)
     }
   }
+  // Iniciar a câmera automaticamente ao carregar a página (apenas uma vez)
+  useEffect(() => {
+    startCamera()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
 
   const handleStartCamera = () => {
     startCamera()
@@ -59,9 +69,9 @@ export default function CameraCard({ onPhotoCapture }: CameraCardProps) {
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
               <AlertCircle className="w-8 h-8 mb-2 text-destructive" />
               <p className="text-sm text-center mb-4">{error}</p>
-              <Button 
-                onClick={retryCamera} 
-                size="sm" 
+              <Button
+                onClick={retryCamera}
+                size="sm"
                 variant="outline"
                 disabled={isLoading}
               >
@@ -79,14 +89,14 @@ export default function CameraCard({ onPhotoCapture }: CameraCardProps) {
                 muted
                 style={{ display: isStreamActive ? 'block' : 'none' }}
               />
-              
+
               {!isStreamActive && !isLoading && (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                   <div className="text-center">
                     <Camera className="w-12 h-12 mb-3 mx-auto opacity-50" />
                     <p className="text-sm mb-3">Câmera desligada</p>
-                    <Button 
-                      onClick={handleStartCamera} 
+                    <Button
+                      onClick={handleStartCamera}
                       size="sm"
                       className="mb-2"
                     >
@@ -121,9 +131,9 @@ export default function CameraCard({ onPhotoCapture }: CameraCardProps) {
           className="hidden"
         />
 
-        {/* Botões de controle - apenas quando câmera está ativa */}
-        {isStreamActive && (
-          <div className="flex gap-2">
+        {/* Botões de controle */}
+        <div className="flex gap-2">
+          {isStreamActive && (
             <Button
               onClick={stopCamera}
               variant="outline"
@@ -134,15 +144,17 @@ export default function CameraCard({ onPhotoCapture }: CameraCardProps) {
               <Square className="w-4 h-4 mr-2" />
               Parar Câmera
             </Button>
+          )}
 
-            <CameraConfigDialog
-              devices={devices}
-              selectedDeviceId={selectedDeviceId}
-              onDeviceChange={switchCamera}
-              isLoading={isLoading}
-            />
-          </div>
-        )}
+          <CameraConfigDialog
+            devices={devices}
+            selectedDeviceId={selectedDeviceId}
+            resolutionMode={resolutionMode}
+            onResolutionChange={setResolutionMode}
+            onDeviceChange={switchCamera}
+            isLoading={isLoading}
+          />
+        </div>
 
         {/* Botão de captura - destaque principal */}
         <Button
@@ -162,13 +174,13 @@ export default function CameraCard({ onPhotoCapture }: CameraCardProps) {
               📹 {devices.find(d => d.deviceId === selectedDeviceId)?.label || 'Câmera ativa'}
             </div>
           )}
-          
+
           {devices.length > 0 && !isStreamActive && (
             <div className="text-xs text-muted-foreground text-center">
               {devices.length} câmera{devices.length > 1 ? 's' : ''} disponível{devices.length > 1 ? 'es' : ''}
             </div>
           )}
-          
+
           {process.env.NODE_ENV === 'development' && (
             <div className="text-xs text-muted-foreground text-center opacity-50">
               Debug: {isLoading ? 'Carregando' : isStreamActive ? 'Ativa' : 'Desligada'}

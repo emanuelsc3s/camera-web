@@ -21,9 +21,13 @@ interface WebcamDevice {
   label: string
 }
 
+type ResolutionMode = 'auto' | 'fullhd' | 'max'
+
 interface CameraConfigDialogProps {
   devices: WebcamDevice[]
   selectedDeviceId: string | null
+  resolutionMode: ResolutionMode
+  onResolutionChange: (mode: ResolutionMode) => Promise<void>
   onDeviceChange: (deviceId: string) => Promise<void>
   isLoading: boolean
 }
@@ -31,15 +35,19 @@ interface CameraConfigDialogProps {
 export default function CameraConfigDialog({
   devices,
   selectedDeviceId,
+  resolutionMode,
+  onResolutionChange,
   onDeviceChange,
   isLoading
 }: CameraConfigDialogProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [tempSelectedDevice, setTempSelectedDevice] = useState<string>(
-    selectedDeviceId || ''
-  )
+  const [tempSelectedDevice, setTempSelectedDevice] = useState<string>(selectedDeviceId || '')
+  const [tempResolutionMode, setTempResolutionMode] = useState<ResolutionMode>(resolutionMode)
 
   const handleApply = async () => {
+    if (tempResolutionMode !== resolutionMode) {
+      await onResolutionChange(tempResolutionMode)
+    }
     if (tempSelectedDevice && tempSelectedDevice !== selectedDeviceId) {
       await onDeviceChange(tempSelectedDevice)
     }
@@ -48,6 +56,7 @@ export default function CameraConfigDialog({
 
   const handleCancel = () => {
     setTempSelectedDevice(selectedDeviceId || '')
+    setTempResolutionMode(resolutionMode)
     setIsOpen(false)
   }
 
@@ -75,7 +84,7 @@ export default function CameraConfigDialog({
             <label htmlFor="camera-select" className="text-sm font-medium">
               Selecionar Câmera
             </label>
-            
+
             {devices.length === 0 ? (
               <div className="text-sm text-muted-foreground">
                 Nenhuma câmera encontrada
@@ -100,6 +109,27 @@ export default function CameraConfigDialog({
             )}
           </div>
 
+          <div className="space-y-2">
+            <label htmlFor="resolution-select" className="text-sm font-medium">
+              Resolução
+            </label>
+            <Select
+              value={tempResolutionMode}
+              onValueChange={(v) => setTempResolutionMode(v as ResolutionMode)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="resolution-select">
+                <SelectValue placeholder="Escolha a resolução" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Automática</SelectItem>
+                <SelectItem value="fullhd">Full HD (1920x1080)</SelectItem>
+                <SelectItem value="max">Máxima suportada</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+
           <div className="flex justify-end space-x-2 pt-4">
             <Button
               variant="outline"
@@ -110,7 +140,7 @@ export default function CameraConfigDialog({
             </Button>
             <Button
               onClick={handleApply}
-              disabled={isLoading || !tempSelectedDevice || tempSelectedDevice === selectedDeviceId}
+              disabled={isLoading || (!(tempSelectedDevice && tempSelectedDevice !== selectedDeviceId) && tempResolutionMode === resolutionMode)}
             >
               {isLoading ? 'Aplicando...' : 'Aplicar'}
             </Button>
