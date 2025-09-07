@@ -1,4 +1,5 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+
+import { Card, CardContent } from '@/components/ui/card'
 import { useEffect } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -47,22 +48,9 @@ export default function CameraCard({ onPhotoCapture }: CameraCardProps) {
 
   return (
     <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Camera className="w-5 h-5" />
-          Webcam
-          {isStreamActive && (
-            <div className="ml-auto">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-xs text-muted-foreground">Ativa</span>
-              </div>
-            </div>
-          )}
-        </CardTitle>
-      </CardHeader>
 
-      <CardContent className="space-y-4">
+
+      <CardContent className="pt-2 space-y-2">
         {/* Container do vídeo */}
         <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
           {error ? (
@@ -122,6 +110,12 @@ export default function CameraCard({ onPhotoCapture }: CameraCardProps) {
                 </div>
               )}
             </>
+          )}
+          {isStreamActive && (
+            <div className="absolute top-2 right-2 flex items-center gap-2 rounded-full bg-black/60 px-2 py-1 backdrop-blur-sm">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span className="text-xs text-white">Ativa</span>
+            </div>
           )}
         </div>
 
