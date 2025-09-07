@@ -168,26 +168,6 @@ export default function CameraCard({ onPhotoCapture, showControls = true, showCa
         )}
 
         {/* Debug info e informações da câmera */}
-        <div className="space-y-1">
-          {isStreamActive && selectedDeviceId && (
-            <div className="text-xs text-muted-foreground text-center">
-              📹 {devices.find(d => d.deviceId === selectedDeviceId)?.label || 'Câmera ativa'}
-            </div>
-          )}
-
-          {devices.length > 0 && !isStreamActive && (
-            <div className="text-xs text-muted-foreground text-center">
-              {devices.length} câmera{devices.length > 1 ? 's' : ''} disponível{devices.length > 1 ? 'es' : ''}
-            </div>
-          )}
-
-          {process.env.NODE_ENV === 'development' && (
-            <div className="text-xs text-muted-foreground text-center opacity-50">
-              Debug: {isLoading ? 'Carregando' : isStreamActive ? 'Ativa' : 'Desligada'}
-              {error && ' | Erro presente'}
-            </div>
-          )}
-        </div>
       </CardContent>
     </Card>
   )
