@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -6,13 +6,13 @@ import CameraCard from '@/components/camera/CameraCard'
 import {
   ChevronLeft,
   Clock3,
-
   Search,
   XCircle,
   CheckCircle2,
   MessageSquare,
   Pause,
-  Bell
+  Bell,
+  Camera
 } from 'lucide-react'
 
 
@@ -26,7 +26,10 @@ export default function HomePage() {
     })
   }, [])
 
-  const handlePhotoCapture = useCallback((_: string) => {
+  const [lastPhoto, setLastPhoto] = useState<string | null>(null)
+
+  const handlePhotoCapture = useCallback((photoDataUrl: string) => {
+    setLastPhoto(photoDataUrl)
     toast.success('Foto capturada com sucesso!')
   }, [])
 
@@ -117,7 +120,28 @@ export default function HomePage() {
         </Card>
         <Card>
           <CardContent className="pt-4">
-            <CameraCard onPhotoCapture={handlePhotoCapture} showControls={false} showCaptureButton={false} />
+            <div className="pt-2 space-y-2">
+              <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+                {lastPhoto ? (
+                  <img src={lastPhoto} alt="Foto capturada" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="relative flex h-full items-center justify-center overflow-hidden">
+                    {/* Fundo sutil com gradiente e borda tracejada ao estilo shadcn */}
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/40 via-muted/30 to-background/60" />
+                    <div className="pointer-events-none absolute inset-0 rounded-lg border border-dashed border-border/50" />
+
+                    {/* Conteúdo do estado vazio */}
+                    <div className="relative flex flex-col items-center text-center gap-2 px-4">
+                      <div className="rounded-full bg-muted p-3 ring-1 ring-border shadow-sm">
+                        <Camera className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground">Nenhuma foto capturada ainda</p>
+                      <p className="text-xs text-muted-foreground">Capture uma imagem para visualizar aqui</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
