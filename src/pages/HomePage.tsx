@@ -9,7 +9,6 @@ import {
   Search,
   XCircle,
   CheckCircle2,
-  MessageSquare,
   Pause,
   Bell,
   Camera
@@ -146,10 +145,6 @@ export default function HomePage() {
         </Card>
       </div>
 
-      {/* Botão flutuante central */}
-      <Button className="fixed bottom-24 left-1/2 -translate-x-1/2 rounded-full h-14 w-14 p-0 bg-teal-600 hover:bg-teal-600/90 shadow-lg">
-        <MessageSquare className="w-6 h-6" />
-      </Button>
 
       {/* Footer de ações */}
       <footer className="fixed inset-x-0 bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
