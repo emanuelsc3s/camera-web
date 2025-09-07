@@ -33,16 +33,6 @@ export default function HomePage() {
   return (
     <>
       {/* Breadcrumbs + Ações do topo */}
-      <div className="max-w-7xl mx-auto mb-6">
-
-        <div className="mt-4 flex items-center justify-end gap-3">
-          <div className="flex items-center gap-2 rounded-full border px-3 py-1 text-sm">
-            <Clock3 className="w-4 h-4 text-muted-foreground" />
-            <span>{nowLabel}</span>
-          </div>
-
-        </div>
-      </div>
 
       {/* Cards de dados (lado a lado) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl mx-auto">
@@ -87,7 +77,15 @@ export default function HomePage() {
         {/* Direita: Dados da leitura */}
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-base font-semibold">Dados da leitura</CardTitle>
+            <CardTitle className="text-base font-semibold">
+              <div className="flex items-center justify-between">
+                <span>Dados da leitura</span>
+                <div className="flex items-center gap-2 rounded-full px-3 py-1 text-sm">
+                  <Clock3 className="w-4 h-4 text-muted-foreground" />
+                  <span>{nowLabel}</span>
+                </div>
+              </div>
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-md border border-dashed p-3 space-y-3">
