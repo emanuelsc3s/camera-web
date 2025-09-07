@@ -99,24 +99,11 @@ export default function HomePage() {
                 <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="Registro ANVISA" />
                 <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="GTIN" />
               </div>
-              <div className="pt-2 text-center text-xs text-muted-foreground">Datamatrix</div>
+
             </div>
 
             {/* KPIs */}
-            <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
-              <div className="rounded-md border bg-blue-50 text-blue-900 p-3">
-                <div className="flex items-center gap-2 text-sm"><Search className="w-4 h-4" /> Inspecionado</div>
-                <div className="mt-1 font-semibold">999,999</div>
-              </div>
-              <div className="rounded-md border bg-red-50 text-red-900 p-3">
-                <div className="flex items-center gap-2 text-sm"><XCircle className="w-4 h-4" /> Rejeitado</div>
-                <div className="mt-1 font-semibold">999,999</div>
-              </div>
-              <div className="rounded-md border bg-green-50 text-green-900 p-3">
-                <div className="flex items-center gap-2 text-sm"><CheckCircle2 className="w-4 h-4" /> Aprovado</div>
-                <div className="mt-1 font-semibold">999,999</div>
-              </div>
-            </div>
+
           </CardContent>
         </Card>
       </div>
@@ -130,7 +117,7 @@ export default function HomePage() {
         </Card>
         <Card>
           <CardContent className="pt-4">
-            <CameraCard onPhotoCapture={handlePhotoCapture} />
+            <CameraCard onPhotoCapture={handlePhotoCapture} showControls={false} showCaptureButton={false} />
           </CardContent>
         </Card>
       </div>

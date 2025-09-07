@@ -9,9 +9,11 @@ import CameraConfigDialog from './CameraConfigDialog'
 
 interface CameraCardProps {
   onPhotoCapture: (photoDataUrl: string) => void
+  showControls?: boolean
+  showCaptureButton?: boolean
 }
 
-export default function CameraCard({ onPhotoCapture }: CameraCardProps) {
+export default function CameraCard({ onPhotoCapture, showControls = true, showCaptureButton = true }: CameraCardProps) {
   const {
     videoRef,
     canvasRef,
@@ -126,40 +128,44 @@ export default function CameraCard({ onPhotoCapture }: CameraCardProps) {
         />
 
         {/* Botões de controle */}
-        <div className="flex gap-2">
-          {isStreamActive && (
-            <Button
-              onClick={stopCamera}
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              disabled={isLoading}
-            >
-              <Square className="w-4 h-4 mr-2" />
-              Parar Câmera
-            </Button>
-          )}
+        {showControls && (
+          <div className="flex gap-2">
+            {isStreamActive && (
+              <Button
+                onClick={stopCamera}
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                disabled={isLoading}
+              >
+                <Square className="w-4 h-4 mr-2" />
+                Parar Câmera
+              </Button>
+            )}
 
-          <CameraConfigDialog
-            devices={devices}
-            selectedDeviceId={selectedDeviceId}
-            resolutionMode={resolutionMode}
-            onResolutionChange={setResolutionMode}
-            onDeviceChange={switchCamera}
-            isLoading={isLoading}
-          />
-        </div>
+            <CameraConfigDialog
+              devices={devices}
+              selectedDeviceId={selectedDeviceId}
+              resolutionMode={resolutionMode}
+              onResolutionChange={setResolutionMode}
+              onDeviceChange={switchCamera}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
 
         {/* Botão de captura - destaque principal */}
-        <Button
-          onClick={handleCapturePhoto}
-          disabled={!isStreamActive || isLoading}
-          className="w-full"
-          size="lg"
-        >
-          <Camera className="w-5 h-5 mr-2" />
-          {!isStreamActive ? 'Inicie a câmera para capturar' : 'Capturar Foto'}
-        </Button>
+        {showCaptureButton && (
+          <Button
+            onClick={handleCapturePhoto}
+            disabled={!isStreamActive || isLoading}
+            className="w-full"
+            size="lg"
+          >
+            <Camera className="w-5 h-5 mr-2" />
+            {!isStreamActive ? 'Inicie a câmera para capturar' : 'Capturar Foto'}
+          </Button>
+        )}
 
         {/* Debug info e informações da câmera */}
         <div className="space-y-1">
