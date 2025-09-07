@@ -34,19 +34,22 @@ export default function HomePage() {
   }, [])
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl mx-auto">
-      {/* Coluna esquerda - Câmera */}
-      <div className="w-full">
-        <CameraCard onPhotoCapture={handlePhotoCapture} />
-      </div>
+    <>
+      <div className="pb-[60px] grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl mx-auto">
+        {/* Coluna esquerda - Câmera */}
+        <div className="w-full">
+          <CameraCard onPhotoCapture={handlePhotoCapture} />
+        </div>
 
-      {/* Coluna direita - Galeria */}
-      <div className="w-full">
-        <GalleryCard 
-          photos={photos} 
-          onDeletePhoto={handleDeletePhoto}
-        />
+        {/* Coluna direita - Galeria */}
+        <div className="w-full">
+          <GalleryCard
+            photos={photos}
+            onDeletePhoto={handleDeletePhoto}
+          />
+        </div>
       </div>
-    </div>
+      <footer className="fixed inset-x-0 bottom-0 bg-[#f5f5f5] h-[60px]"></footer>
+    </>
   )
 }
