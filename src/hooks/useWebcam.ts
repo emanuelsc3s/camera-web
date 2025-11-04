@@ -52,6 +52,14 @@ const CAMERA_CONSTRAINTS = [
 // Utilitário para aguardar um delay
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
+// Backoff exponencial com jitter leve para retries de NotReadableError
+const backoffDelay = (attempt: number, base = 500, cap = 4000) => {
+  const exp = Math.min(cap, base * Math.pow(2, attempt))
+  const jitter = Math.floor(Math.random() * 250)
+  return exp + jitter
+}
+
+
 export function useWebcam(): UseWebcamReturn {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -88,6 +96,15 @@ export function useWebcam(): UseWebcamReturn {
   const debugLog = useCallback((_message: string, _data?: any) => {
     // silenciado conforme solicitado
   }, [])
+
+
+  // Registro de tentativas para feedback ao usuário
+  const attemptSummaryRef = useRef<string[]>([])
+  const resetAttemptLog = () => { attemptSummaryRef.current = [] }
+  const logAttempt = (msg: string) => {
+    attemptSummaryRef.current.push(msg)
+    debugLog(msg)
+  }
 
   // Listar dispositivos de câmera disponíveis
   const getDevices = useCallback(async () => {
@@ -169,12 +186,13 @@ export function useWebcam(): UseWebcamReturn {
 
     for (const device of availableDevices) {
       try {
-        debugLog(`Tentando câmera alternativa: ${device.label}`)
+        logAttempt(`Tentando câmera alternativa: ${device.label}`)
         const constraints = { video: { deviceId: { exact: device.deviceId } } }
         const mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
-        debugLog(`Sucesso com câmera alternativa: ${device.label}`)
+        logAttempt(`✅ Sucesso com câmera alternativa: ${device.label}`)
         return mediaStream
-      } catch (err) {
+      } catch (err: any) {
+        logAttempt(`Falha com câmera ${device.label}: ${err?.name || 'Erro desconhecido'}`)
         debugLog(`Falha com câmera ${device.label}:`, err)
         continue
       }
@@ -185,11 +203,14 @@ export function useWebcam(): UseWebcamReturn {
 
   // Tentar todas as câmeras disponíveis
   const tryAllCameras = useCallback(async (): Promise<MediaStream> => {
+    resetAttemptLog()
+    logAttempt(`Buscando câmera disponível (${devices.length} detectada${devices.length !== 1 ? 's' : ''})...`)
+
     debugLog(`Tentando todas as ${devices.length} câmeras disponíveis...`)
 
     for (let i = 0; i < devices.length; i++) {
       const device = devices[i]
-
+      logAttempt(`Testando ${device.label}`)
 
       debugLog(`Testando câmera ${i + 1}/${devices.length}: ${device.label}`)
 
@@ -208,14 +229,16 @@ export function useWebcam(): UseWebcamReturn {
           debugLog(`  Tentando constraint ${constraintIndex + 1} para ${device.label}:`, constraints)
           const mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
           debugLog(`✅ Sucesso com ${device.label}!`)
+          logAttempt(`✅ Sucesso com ${device.label}`)
           return mediaStream
-        } catch (err) {
+        } catch (err: any) {
           debugLog(`  Falha constraint ${constraintIndex + 1} para ${device.label}:`, err)
+          logAttempt(`Falha (${err?.name || 'Erro'}) em ${device.label} [tentativa ${constraintIndex + 1}]`)
 
-          // Para NotReadableError, aguardar antes da próxima tentativa
+          // Para NotReadableError, aguardar antes da próxima tentativa com backoff exponencial + jitter
           if (err instanceof Error && err.name === 'NotReadableError') {
-            const delay = 1000 * (constraintIndex + 1) // 1s, 2s, 3s
-            debugLog(`  Aguardando ${delay/1000}s antes da próxima tentativa...`)
+            const delay = backoffDelay(constraintIndex)
+            debugLog(`  Aguardando ${Math.round(delay/100)/10}s antes da próxima tentativa...`)
             await sleep(delay)
           }
         }
@@ -231,6 +254,7 @@ export function useWebcam(): UseWebcamReturn {
     if (!deviceId) {
       if (devices.length > 0) {
         // Já temos lista de dispositivos - tentar todas as câmeras
+        logAttempt('Nenhuma câmera específica selecionada; tentando todas as câmeras disponíveis...')
         debugLog('Nenhuma câmera específica, tentando todas...')
         return tryAllCameras()
       } else {
@@ -249,9 +273,19 @@ export function useWebcam(): UseWebcamReturn {
         } catch (err) {
           debugLog(`Falha na tentativa ${retryCount + 1}:`, err)
           if (err instanceof Error && err.name === 'NotReadableError') {
-            const delay = (retryCount + 1) * 2000
-            debugLog(`NotReadableError detectado, aguardando ${delay/1000} segundos...`)
+            const delay = backoffDelay(retryCount)
+            debugLog(`NotReadableError detectado, aguardando ${Math.round(delay/100)/10} segundos...`)
             await sleep(delay)
+            // Após aguardar, tentar enumerar dispositivos e buscar alternativas
+            const freshDevices = await getDevices()
+            if (freshDevices.length > 0) {
+              logAttempt('Câmera padrão ocupada. Tentando alternativas automaticamente...')
+              try {
+                return await tryAllCameras()
+              } catch {
+                // Se todas alternativas também falharem, continua o fluxo de retry abaixo
+              }
+            }
           }
           if (retryCount + 1 < CAMERA_CONSTRAINTS.length) {
             return tryGetUserMedia(undefined, retryCount + 1)
@@ -297,16 +331,28 @@ export function useWebcam(): UseWebcamReturn {
     } catch (err) {
       debugLog(`Falha na tentativa ${retryCount + 1}:`, err)
 
-      // Para NotReadableError, aumentar o delay progressivamente
+      // Para NotReadableError, aumentar o delay progressivamente e tentar alternativas
       if (err instanceof Error && err.name === 'NotReadableError') {
-        const delay = (retryCount + 1) * 2000 // 2s, 4s, 6s...
-        debugLog(`NotReadableError detectado, aguardando ${delay/1000} segundos...`)
+        const delay = backoffDelay(retryCount) // backoff com jitter
+        debugLog(`NotReadableError detectado, aguardando ${Math.round(delay/100)/10} segundos...`)
         await sleep(delay)
+
+        // Antes de insistir na mesma câmera, tente outras automaticamente
+        if (devices.length > 1 && deviceId) {
+          try {
+            const failingLabel = devices.find(d => d.deviceId === deviceId)?.label || 'câmera selecionada'
+            logAttempt(`Câmera ocupada (${failingLabel}). Tentando alternativas...`)
+            const altStream = await tryWithDifferentCameras(deviceId)
+            return altStream
+          } catch {
+            // Se alternativas também falharem, continua o retry normal
+          }
+        }
       }
 
       return tryGetUserMedia(deviceId, retryCount + 1)
     }
-  }, [debugLog, devices, tryWithDifferentCameras, tryAllCameras, resolutionMode])
+  }, [debugLog, devices, tryWithDifferentCameras, tryAllCameras, resolutionMode, getDevices])
 
   // Iniciar câmera com retry inteligente (à prova de chamadas simultâneas/StrictMode)
   const startCamera = useCallback(async (deviceId?: string) => {
@@ -314,6 +360,7 @@ export function useWebcam(): UseWebcamReturn {
     const mySeq = ++startSeqRef.current
     setIsLoading(true)
     setError(null)
+    resetAttemptLog()
 
     // Respeita preferência persistida quando nenhum deviceId é passado
     const desiredDeviceId = deviceId ?? selectedDeviceIdRef.current ?? undefined
@@ -440,6 +487,8 @@ export function useWebcam(): UseWebcamReturn {
       }
 
       let errorMessage = 'Erro ao acessar a webcam'
+      const attempts = attemptSummaryRef.current
+      const attemptsText = attempts.length ? `\n\nTentativas realizadas:\n• ${attempts.slice(0, 8).join('\n• ')}` : ''
 
       if (err instanceof Error) {
         switch (err.name) {
@@ -449,17 +498,19 @@ export function useWebcam(): UseWebcamReturn {
           case 'NotFoundError':
             errorMessage = 'Nenhuma webcam encontrada. Verifique se há uma câmera conectada.'
             break
-          case 'NotReadableError':
-            errorMessage = `Webcam ocupada por outro aplicativo.
+          case 'NotReadableError': {
+            const failingLabel = desiredDeviceId ? (devices.find(d => d.deviceId === desiredDeviceId)?.label || null) : null
+            errorMessage = `Não foi possível acessar a câmera${failingLabel ? ` (${failingLabel})` : ''} porque ela parece estar ocupada por outro aplicativo.
 
-🔧 Soluções:
-• Feche Chrome, Edge, Teams, Zoom, Skype
-• Reinicie o navegador
-• Desconecte e reconecte a webcam
-• Tente outra câmera se disponível
+Ações automáticas realizadas:
+• ${attempts.length ? attempts.join('\n• ') : 'Tentamos reestabelecer o acesso com diferentes configurações e dispositivos'}
 
-${devices.length > 1 ? '💡 Você tem outras câmeras disponíveis - tente trocar nas configurações' : ''}`
+O que você pode fazer agora:
+• ${devices.length > 1 ? 'Troque para outra câmera nas configurações (botão "Trocar câmera")' : 'Feche aplicativos que possam estar usando a câmera (Teams, Zoom, Skype, etc.)'}
+• Clique em "Tentar novamente"
+• Verifique as permissões do navegador (ícone da câmera na barra de endereços)`
             break
+          }
           case 'OverconstrainedError':
             errorMessage = 'Configurações da câmera não suportadas. Tente uma câmera diferente.'
             break
@@ -473,9 +524,9 @@ ${devices.length > 1 ? '💡 Você tem outras câmeras disponíveis - tente troc
 • Reinicie o computador se necessário
 • Verifique se a webcam funciona em outros aplicativos
 
-${devices.length} câmera${devices.length > 1 ? 's' : ''} detectada${devices.length > 1 ? 's' : ''}`
+${devices.length} câmera${devices.length > 1 ? 's' : ''} detectada${devices.length > 1 ? 's' : ''}${attemptsText}`
             } else {
-              errorMessage = `Erro ao acessar webcam: ${err.message}`
+              errorMessage = `Erro ao acessar webcam: ${err.message}${attemptsText}`
             }
         }
       }
