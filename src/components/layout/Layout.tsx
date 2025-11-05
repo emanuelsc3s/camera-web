@@ -3,9 +3,9 @@ import Header from './Header'
 
 export default function Layout() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
       <Header />
-      <main className="container mx-auto px-4 py-2">
+      <main className="flex-1 overflow-hidden">
         <Outlet />
       </main>
     </div>

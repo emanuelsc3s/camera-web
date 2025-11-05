@@ -1,135 +1,210 @@
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import CameraCard from '@/components/camera/CameraCard'
+import ReferenceDataCard from '@/components/inspection/ReferenceDataCard'
+import PhotoCaptureModal from '@/components/inspection/PhotoCaptureModal'
 import {
   ChevronLeft,
   Search,
   XCircle,
   CheckCircle2,
-  Pause,
-  Bell,
   Camera
 } from 'lucide-react'
 
+// Tipo para os itens de inspeção
+type InspectionItem = 'gtin' | 'datamatrix' | 'lote' | 'validade'
+
+// Estado de conformidade: null (não marcado), true (conforme), false (não conforme)
+type ConformityState = boolean | null
 
 export default function HomePage() {
-
   const [lastPhoto, setLastPhoto] = useState<string | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [inspectionStates, setInspectionStates] = useState<Record<InspectionItem, ConformityState>>({
+    gtin: null,
+    datamatrix: null,
+    lote: null,
+    validade: null
+  })
 
-  const handlePhotoCapture = useCallback((photoDataUrl: string) => {
+  // Dados de referência (em produção, viriam de uma API ou contexto)
+  const referenceData = {
+    op: '12345',
+    lote: 'L2024001',
+    validade: '12/2025',
+    produto: 'Medicamento XYZ 500mg - Caixa com 30 comprimidos',
+    registroAnvisa: '1.0234.5678',
+    gtin: '7891234567890'
+  }
+
+  const handlePhotoConfirmed = (photoDataUrl: string) => {
     setLastPhoto(photoDataUrl)
     toast.success('Foto capturada com sucesso!')
-  }, [])
+  }
+
+  // Alterna entre: null -> true (conforme) -> false (não conforme) -> null
+  const toggleInspectionState = (item: InspectionItem) => {
+    setInspectionStates(prev => {
+      const currentState = prev[item]
+      let newState: ConformityState
+
+      if (currentState === null) {
+        newState = true // Conforme
+      } else if (currentState === true) {
+        newState = false // Não conforme
+      } else {
+        newState = null // Não marcado
+      }
+
+      return { ...prev, [item]: newState }
+    })
+  }
+
+  const inspectionItems: { key: InspectionItem; label: string }[] = [
+    { key: 'gtin', label: 'GTIN' },
+    { key: 'datamatrix', label: 'Datamatrix' },
+    { key: 'lote', label: 'Impressão do Lote' },
+    { key: 'validade', label: 'Impressão da Validade' }
+  ]
 
   return (
     <>
-      {/* Breadcrumbs + Ações do topo */}
+      <div className="h-full flex flex-col">
+        {/* Área de conteúdo principal - ocupa espaço disponível */}
+        <div className="flex-1 overflow-hidden p-2 sm:p-4">
+          <div className="h-full flex flex-col gap-2 sm:gap-3">
+            {/* Área de dados de referência e preview - ocupa espaço disponível */}
+            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3">
+              {/* Dados de Referência (lado esquerdo) */}
+              <ReferenceDataCard data={referenceData} />
 
-      {/* Cards de dados (lado a lado) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl mx-auto">
-        {/* Esquerda: Dados informados */}
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-base font-semibold">Dados informados</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border border-dashed p-3 space-y-3">
-              <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
-                <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="OP" />
-                <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="Lote" />
-                <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="Validade" />
-              </div>
-              <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="Produto" />
-              <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
-                <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="Registro ANVISA" />
-                <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="GTIN" />
-              </div>
-              <div className="pt-2 text-center text-xs text-muted-foreground">Texto Dados Variáveis</div>
-            </div>
-
-            {/* KPIs */}
-            <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
-              <div className="rounded-md border bg-blue-50 text-blue-900 p-3">
-                <div className="flex items-center gap-2 text-sm"><Search className="w-4 h-4" /> Inspecionado</div>
-                <div className="mt-1 font-semibold">999,999</div>
-              </div>
-              <div className="rounded-md border bg-red-50 text-red-900 p-3">
-                <div className="flex items-center gap-2 text-sm"><XCircle className="w-4 h-4" /> Rejeitado</div>
-                <div className="mt-1 font-semibold">999,999</div>
-              </div>
-              <div className="rounded-md border bg-green-50 text-green-900 p-3">
-                <div className="flex items-center gap-2 text-sm"><CheckCircle2 className="w-4 h-4" /> Aprovado</div>
-                <div className="mt-1 font-semibold">999,999</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-      </div>
-
-      {/* Pré-visualizações (2 câmeras) */}
-      <div className="max-w-7xl mx-auto mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6 pb-28">
-        <Card>
-          <CardContent className="pt-4">
-            <CameraCard onPhotoCapture={handlePhotoCapture} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="pt-2 space-y-2">
-              <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-                {lastPhoto ? (
-                  <img src={lastPhoto} alt="Foto capturada" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="relative flex h-full items-center justify-center overflow-hidden">
-                    {/* Fundo sutil com gradiente e borda tracejada ao estilo shadcn */}
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/40 via-muted/30 to-background/60" />
-                    <div className="pointer-events-none absolute inset-0 rounded-lg border border-dashed border-border/50" />
-
-                    {/* Conteúdo do estado vazio */}
-                    <div className="relative flex flex-col items-center text-center gap-2 px-4">
-                      <div className="rounded-full bg-muted p-3 ring-1 ring-border shadow-sm">
-                        <Camera className="w-6 h-6 text-muted-foreground" />
+              {/* Preview da foto capturada (lado direito) */}
+              <div className="h-full flex flex-col bg-card rounded-lg border shadow-sm overflow-hidden">
+                <div className="flex-none border-b bg-muted/50 px-3 sm:px-4 py-2 sm:py-3">
+                  <h2 className="text-base font-semibold">Foto Capturada</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {lastPhoto ? 'Confira os dados na imagem' : 'Clique em "Capturar Foto" para iniciar'}
+                  </p>
+                </div>
+                <div className="flex-1 min-h-0 p-2 sm:p-3">
+                  <div className="h-full relative bg-muted rounded-lg overflow-hidden">
+                    {lastPhoto ? (
+                      <img src={lastPhoto} alt="Foto capturada" className="w-full h-full object-contain" />
+                    ) : (
+                      <div className="relative flex h-full items-center justify-center overflow-hidden">
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/40 via-muted/30 to-background/60" />
+                        <div className="pointer-events-none absolute inset-0 rounded-lg border border-dashed border-border/50" />
+                        <div className="relative flex flex-col items-center text-center gap-2 px-4">
+                          <div className="rounded-full bg-muted p-3 ring-1 ring-border shadow-sm">
+                            <Camera className="w-5 h-5 sm:w-6 sm:h-6 text-muted-foreground" />
+                          </div>
+                          <p className="text-xs sm:text-sm font-medium text-foreground">Nenhuma foto capturada</p>
+                          <p className="text-xs text-muted-foreground hidden sm:block">Clique no botão abaixo para capturar</p>
+                        </div>
                       </div>
-                      <p className="text-sm font-medium text-foreground">Nenhuma foto capturada ainda</p>
-                      <p className="text-xs text-muted-foreground">Capture uma imagem para visualizar aqui</p>
-                    </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
 
+            {/* Checkboxes de inspeção - altura fixa compacta */}
+            <div className="flex-none">
+              <div className="bg-card rounded-lg border shadow-sm p-2 sm:p-3">
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                  {inspectionItems.map(({ key, label }) => {
+                    const state = inspectionStates[key]
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => toggleInspectionState(key)}
+                        className={`
+                          relative flex items-start gap-2 sm:gap-3 p-2 sm:p-3 rounded-md border-2 transition-all min-h-[80px] sm:min-h-[90px]
+                          ${state === true ? 'border-green-500 bg-green-50 dark:bg-green-950' : ''}
+                          ${state === false ? 'border-red-500 bg-red-50 dark:bg-red-950' : ''}
+                          ${state === null ? 'border-border hover:border-primary/50' : ''}
+                        `}
+                      >
+                        {/* Ícone à esquerda */}
+                        <div className="flex-none">
+                          {state === true && (
+                            <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400" />
+                          )}
+                          {state === false && (
+                            <XCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400" />
+                          )}
+                          {state === null && (
+                            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 border-muted-foreground/30" />
+                          )}
+                        </div>
 
-      {/* Footer de ações */}
-      <footer className="fixed inset-x-0 bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="max-w-7xl mx-auto h-16 flex items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" className="gap-2">
-              <ChevronLeft className="w-4 h-4" />
-              VOLTAR
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" className="gap-2">
-              <Pause className="w-4 h-4" />
-              PAUSAR
-            </Button>
-            <Button className="gap-2">
-              <Search className="w-4 h-4" />
-              CONSULTAR
-            </Button>
-            <Button variant="secondary" className="gap-2">
-              <Bell className="w-4 h-4" />
-              ALARMES
-            </Button>
+                        {/* Conteúdo à direita */}
+                        <div className="flex-1 flex flex-col justify-center gap-1 sm:gap-1.5 min-w-0">
+                          {/* Nome do item - alinhado à esquerda */}
+                          <div className="text-base font-medium text-left leading-tight">
+                            {label}
+                          </div>
+
+                          {/* Status APROVADO/REPROVADO - centralizado e BEM MAIOR */}
+                          <div className={`
+                            text-base sm:text-lg font-extrabold uppercase tracking-wide leading-none text-center
+                            ${state === true ? 'text-green-700 dark:text-green-300' : ''}
+                            ${state === false ? 'text-red-700 dark:text-red-300' : ''}
+                            ${state === null ? 'invisible' : ''}
+                          `}>
+                            {state === true ? 'APROVADO' : state === false ? 'REPROVADO' : 'PLACEHOLDER'}
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </footer>
+
+        {/* Footer de ações - altura fixa */}
+        <footer className="flex-none border-t bg-background">
+          <div className="h-14 sm:h-16 flex items-center justify-between px-2 sm:px-4 gap-2">
+            <Button variant="outline" size="sm" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+              <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">VOLTAR</span>
+              <span className="sm:hidden">Voltar</span>
+            </Button>
+
+            <div className="flex items-center gap-1 sm:gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1 sm:gap-2 text-xs sm:text-sm"
+                onClick={() => setIsModalOpen(true)}
+              >
+                <Camera className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">CAPTURAR FOTO</span>
+                <span className="sm:hidden">Capturar</span>
+              </Button>
+
+              <Button
+                size="sm"
+                className="gap-1 sm:gap-2 text-xs sm:text-sm"
+                disabled={!lastPhoto}
+              >
+                <Search className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">CONSULTAR</span>
+                <span className="sm:hidden">Consultar</span>
+              </Button>
+            </div>
+          </div>
+        </footer>
+      </div>
+
+      {/* Modal de captura de foto */}
+      <PhotoCaptureModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        onPhotoConfirmed={handlePhotoConfirmed}
+      />
     </>
   )
 }
