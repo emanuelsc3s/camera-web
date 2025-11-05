@@ -1,6 +1,15 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import ReferenceDataCard from '@/components/inspection/ReferenceDataCard'
 import PhotoCaptureModal from '@/components/inspection/PhotoCaptureModal'
 import {
@@ -8,18 +17,18 @@ import {
   Search,
   XCircle,
   CheckCircle2,
-  Camera
+  Camera,
+  Save,
+  AlertCircle
 } from 'lucide-react'
-
-// Tipo para os itens de inspeção
-type InspectionItem = 'gtin' | 'datamatrix' | 'lote' | 'validade'
-
-// Estado de conformidade: null (não marcado), true (conforme), false (não conforme)
-type ConformityState = boolean | null
+import type { InspectionItem, ConformityState, InspectionRecord } from '@/types/inspection'
+import { saveInspectionRecord, generateRecordId, formatDateTime } from '@/services/storageService'
 
 export default function HomePage() {
+  const navigate = useNavigate()
   const [lastPhoto, setLastPhoto] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
   const [inspectionStates, setInspectionStates] = useState<Record<InspectionItem, ConformityState>>({
     gtin: null,
     datamatrix: null,
@@ -58,6 +67,71 @@ export default function HomePage() {
 
       return { ...prev, [item]: newState }
     })
+  }
+
+  // Abre o modal de confirmação antes de salvar
+  const handleSaveInspection = () => {
+    // Valida se há foto capturada
+    if (!lastPhoto) {
+      toast.error('Capture uma foto antes de salvar o registro!')
+      return
+    }
+
+    // Valida se todos os itens foram inspecionados
+    const allInspected = Object.values(inspectionStates).every(state => state !== null)
+    if (!allInspected) {
+      toast.error('Marque todos os itens de inspeção antes de salvar!')
+      return
+    }
+
+    // Se passou nas validações, abre o modal de confirmação
+    setIsConfirmModalOpen(true)
+  }
+
+  // Confirma e salva o registro de inspeção no localStorage
+  const handleConfirmSave = () => {
+    try {
+      const timestamp = Date.now()
+      const record: InspectionRecord = {
+        id: generateRecordId(),
+        timestamp,
+        dataHora: formatDateTime(timestamp),
+        foto: lastPhoto!, // Garantido que não é null pelas validações
+        referenceData,
+        inspectionStates
+      }
+
+      const success = saveInspectionRecord(record)
+
+      if (success) {
+        toast.success('Registro de inspeção salvo com sucesso!')
+
+        // Limpa o formulário após salvar
+        setLastPhoto(null)
+        setInspectionStates({
+          gtin: null,
+          datamatrix: null,
+          lote: null,
+          validade: null
+        })
+
+        // Fecha o modal de confirmação
+        setIsConfirmModalOpen(false)
+      } else {
+        toast.error('Erro ao salvar registro de inspeção')
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        toast.error(error.message)
+      } else {
+        toast.error('Erro desconhecido ao salvar registro')
+      }
+    }
+  }
+
+  // Cancela o salvamento e fecha o modal
+  const handleCancelSave = () => {
+    setIsConfirmModalOpen(false)
   }
 
   const inspectionItems: { key: InspectionItem; label: string }[] = [
@@ -186,8 +260,20 @@ export default function HomePage() {
 
               <Button
                 size="sm"
+                variant="secondary"
                 className="gap-1 sm:gap-2 text-xs sm:text-sm"
+                onClick={handleSaveInspection}
                 disabled={!lastPhoto}
+              >
+                <Save className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">SALVAR</span>
+                <span className="sm:hidden">Salvar</span>
+              </Button>
+
+              <Button
+                size="sm"
+                className="gap-1 sm:gap-2 text-xs sm:text-sm"
+                onClick={() => navigate('/consulta')}
               >
                 <Search className="w-3 h-3 sm:w-4 sm:h-4" />
                 <span className="hidden sm:inline">CONSULTAR</span>
@@ -204,6 +290,47 @@ export default function HomePage() {
         onOpenChange={setIsModalOpen}
         onPhotoConfirmed={handlePhotoConfirmed}
       />
+
+      {/* Modal de confirmação de salvamento */}
+      <Dialog open={isConfirmModalOpen} onOpenChange={setIsConfirmModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-primary" />
+              Confirmar Salvamento
+            </DialogTitle>
+            <DialogDescription className="text-lg pt-2 text-gray-700 dark:text-gray-300">
+              Deseja salvar este registro de inspeção?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <p className="text-base text-gray-600 dark:text-gray-400">
+              Ao confirmar, todos os dados da inspeção serão salvos e a tela será limpa para uma nova inspeção.
+            </p>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCancelSave}
+              className="gap-2"
+            >
+              <XCircle className="w-4 h-4" />
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmSave}
+              className="gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
