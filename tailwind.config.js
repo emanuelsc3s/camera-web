@@ -9,6 +9,14 @@ module.exports = {
   ],
   prefix: "",
   theme: {
+    // Breakpoints customizados para melhor responsividade
+    screens: {
+      'sm': '640px',   // Mobile landscape / Tablet portrait
+      'md': '768px',   // Tablet landscape
+      'lg': '1024px',  // Desktop / 1024x768 (otimizado)
+      'xl': '1280px',  // Desktop large
+      '2xl': '1536px', // Desktop extra large
+    },
     container: {
       center: true,
       padding: "2rem",

@@ -43,44 +43,53 @@ export default function StatsCard({
   // Define as cores baseadas na variante
   const variantStyles = {
     default: {
+      cardBg: '#ceeffb', // Cor de fundo específica para o card "Inspecionados"
       iconBg: 'bg-primary/10',
       iconColor: 'text-primary',
-      textColor: 'text-foreground'
+      textColor: '#104d69' // Cor de fonte aplicada
     },
     success: {
+      cardBg: undefined, // Mantém cor padrão do Card
       iconBg: 'bg-green-500/10',
       iconColor: 'text-green-600 dark:text-green-500',
-      textColor: 'text-green-600 dark:text-green-500'
+      textColor: '#104d69' // Cor de fonte aplicada
     },
     danger: {
+      cardBg: undefined, // Mantém cor padrão do Card
       iconBg: 'bg-red-500/10',
       iconColor: 'text-red-600 dark:text-red-500',
-      textColor: 'text-red-600 dark:text-red-500'
+      textColor: '#104d69' // Cor de fonte aplicada
     }
   }
 
   const styles = variantStyles[variant]
 
   return (
-    <Card className={cn('p-4 sm:p-6', className)}>
-      <div className="flex items-center gap-3 sm:gap-4">
+    <Card
+      className={cn('p-2 sm:p-2.5 md:p-3 lg:p-4', className)}
+      style={styles.cardBg ? { backgroundColor: styles.cardBg } : undefined}
+    >
+      <div className="flex items-center gap-1.5 sm:gap-2 md:gap-2.5 lg:gap-3">
         {/* Ícone */}
         <div className={cn(
-          'flex-none rounded-full p-2 sm:p-3',
+          'flex-none rounded-full p-1.5 sm:p-1.5 md:p-2 lg:p-2',
           styles.iconBg
         )}>
-          <Icon className={cn('w-5 h-5 sm:w-6 sm:h-6', styles.iconColor)} />
+          <Icon className={cn('w-4 h-4 sm:w-4 sm:h-4 md:w-4.5 md:h-4.5 lg:w-5 lg:h-5', styles.iconColor)} />
         </div>
 
         {/* Conteúdo */}
         <div className="flex-1 min-w-0">
-          <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1">
+          <p
+            className="font-bold mb-0 sm:mb-0.5"
+            style={{ color: styles.textColor, fontSize: '14px' }}
+          >
             {title}
           </p>
-          <p className={cn(
-            'text-2xl sm:text-3xl font-bold tabular-nums',
-            styles.textColor
-          )}>
+          <p
+            className="font-bold tabular-nums leading-tight"
+            style={{ color: styles.textColor, fontSize: '22px' }}
+          >
             {value.toLocaleString('pt-BR')}
           </p>
         </div>

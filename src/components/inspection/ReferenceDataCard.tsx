@@ -16,15 +16,15 @@ interface ReferenceDataCardProps {
 export default function ReferenceDataCard({ data }: ReferenceDataCardProps) {
   return (
     <div className="h-full flex flex-col bg-card rounded-lg border shadow-sm overflow-hidden">
-      <div className="flex-none border-b bg-muted/50 px-3 sm:px-4 py-2 sm:py-3">
-        <h2 className="text-base font-semibold">Dados de Referência</h2>
-        <p className="text-base text-muted-foreground mt-0.5">Confira estes dados na foto capturada</p>
+      <div className="flex-none border-b bg-muted/50 px-3 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3">
+        <h2 className="text-sm sm:text-base font-semibold">Dados de Referência</h2>
+        <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">Confira estes dados na foto capturada</p>
       </div>
-      
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4">
-        <div className="space-y-3 sm:space-y-4">
+
+      <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 md:p-4">
+        <div className="space-y-2.5 sm:space-y-3 md:space-y-4">
           {/* OP, Lote, Validade */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-2.5 md:gap-3">
             <DataField label="OP" value={data.op} />
             <DataField label="Lote" value={data.lote} />
             <DataField label="Validade" value={data.validade} />
@@ -34,17 +34,17 @@ export default function ReferenceDataCard({ data }: ReferenceDataCardProps) {
           <DataField label="Produto" value={data.produto} fullWidth />
 
           {/* Registro ANVISA e GTIN */}
-          <div className="grid grid-cols-2 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:gap-2.5 md:gap-3">
             <DataField label="Registro ANVISA" value={data.registroAnvisa} />
             <DataField label="GTIN" value={data.gtin} />
           </div>
 
           {/* Informação adicional */}
-          <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t">
-            <div className="flex items-start gap-2 text-base text-muted-foreground">
+          <div className="mt-3 sm:mt-4 md:mt-6 pt-2.5 sm:pt-3 md:pt-4 border-t">
+            <div className="flex items-start gap-2 text-xs sm:text-sm text-muted-foreground">
               <div className="flex-none mt-0.5">
                 <svg
-                  className="w-4 h-4"
+                  className="w-3.5 h-3.5 sm:w-4 sm:h-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -77,10 +77,10 @@ interface DataFieldProps {
 function DataField({ label, value, fullWidth = false }: DataFieldProps) {
   return (
     <div className={fullWidth ? 'col-span-full' : ''}>
-      <label className="block text-base font-medium text-muted-foreground mb-1">
+      <label className="block text-xs sm:text-sm md:text-base font-medium text-muted-foreground mb-1">
         {label}
       </label>
-      <div className="rounded-md border bg-muted/30 px-3 py-2 text-base font-medium">
+      <div className="rounded-md border bg-muted/30 px-2.5 sm:px-3 py-1.5 sm:py-2 text-sm sm:text-base font-medium">
         {value || '-'}
       </div>
     </div>
