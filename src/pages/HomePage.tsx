@@ -21,7 +21,7 @@ import {
   Save,
   AlertCircle
 } from 'lucide-react'
-import type { InspectionItem, ConformityState, InspectionRecord } from '@/types/inspection'
+import type { InspectionItem, ConformityState, InspectionRecord, InspectionStatus } from '@/types/inspection'
 import { saveInspectionRecord, generateRecordId, formatDateTime } from '@/services/storageService'
 
 export default function HomePage() {
@@ -69,6 +69,22 @@ export default function HomePage() {
     })
   }
 
+  /**
+   * Calcula o status final da inspeção baseado nos itens inspecionados
+   * Regra de negócio:
+   * - REPROVADO: Se pelo menos um item tiver status false (não conforme)
+   * - APROVADO: Somente se todos os itens tiverem status true (conforme)
+   */
+  const calculateFinalStatus = (states: Record<InspectionItem, ConformityState>): InspectionStatus => {
+    const hasRejected = Object.values(states).some(state => state === false)
+
+    if (hasRejected) {
+      return 'REPROVADO'
+    }
+
+    return 'APROVADO'
+  }
+
   // Abre o modal de confirmação antes de salvar
   const handleSaveInspection = () => {
     // Valida se há foto capturada
@@ -92,13 +108,18 @@ export default function HomePage() {
   const handleConfirmSave = () => {
     try {
       const timestamp = Date.now()
+
+      // Calcula o status final baseado nos itens inspecionados
+      const statusFinal = calculateFinalStatus(inspectionStates)
+
       const record: InspectionRecord = {
         id: generateRecordId(),
         timestamp,
         dataHora: formatDateTime(timestamp),
         foto: lastPhoto!, // Garantido que não é null pelas validações
         referenceData,
-        inspectionStates
+        inspectionStates,
+        statusFinal // Status calculado automaticamente
       }
 
       const success = saveInspectionRecord(record)

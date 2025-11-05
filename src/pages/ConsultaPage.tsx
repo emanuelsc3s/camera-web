@@ -165,13 +165,14 @@ export default function ConsultaPage() {
               </thead>
               <tbody>
                 {paginatedData.data.map((record) => {
-                  const hasIssues = Object.values(record.inspectionStates).some(state => state === false)
-                  
+                  // Usa o statusFinal calculado automaticamente ao salvar o registro
+                  const isReprovado = record.statusFinal === 'REPROVADO'
+
                   return (
                     <tr
                       key={record.id}
                       className={`border-b hover:bg-muted/30 transition-colors ${
-                        hasIssues ? 'bg-red-50 dark:bg-red-950/20' : ''
+                        isReprovado ? 'bg-red-50 dark:bg-red-950/20' : ''
                       }`}
                     >
                       <td className="p-3">
@@ -184,10 +185,10 @@ export default function ConsultaPage() {
                         />
                       </td>
                       <td className="p-3 text-sm">
-                        {hasIssues ? (
-                          <span className="text-red-600 dark:text-red-400 font-semibold">Com Problemas</span>
+                        {isReprovado ? (
+                          <span className="text-red-600 dark:text-red-400 font-semibold">REPROVADO</span>
                         ) : (
-                          <span className="text-green-600 dark:text-green-400 font-semibold">OK</span>
+                          <span className="text-green-600 dark:text-green-400 font-semibold">APROVADO</span>
                         )}
                       </td>
                       <td className="p-3 text-sm">{record.dataHora}</td>
@@ -297,6 +298,22 @@ export default function ConsultaPage() {
                   alt="Foto da inspeção"
                   className="w-full rounded-lg border"
                 />
+              </div>
+
+              {/* Status Final */}
+              <div className={`p-4 rounded-lg border-2 ${
+                selectedRecord.statusFinal === 'REPROVADO'
+                  ? 'bg-red-50 dark:bg-red-950/20 border-red-500'
+                  : 'bg-green-50 dark:bg-green-950/20 border-green-500'
+              }`}>
+                <h3 className="font-semibold mb-2 text-base">Status Final da Inspeção</h3>
+                <p className={`text-2xl font-extrabold ${
+                  selectedRecord.statusFinal === 'REPROVADO'
+                    ? 'text-red-700 dark:text-red-300'
+                    : 'text-green-700 dark:text-green-300'
+                }`}>
+                  {selectedRecord.statusFinal}
+                </p>
               </div>
 
               {/* Informações Gerais */}

@@ -26,26 +26,32 @@ export interface InspectionStates {
   validade: ConformityState
 }
 
+// Status final da inspeção
+export type InspectionStatus = 'APROVADO' | 'REPROVADO'
+
 // Registro completo de inspeção salvo no localStorage
 export interface InspectionRecord {
   // Identificador único do registro
   id: string
-  
+
   // Timestamp de criação do registro
   timestamp: number
-  
+
   // Data/hora formatada para exibição
   dataHora: string
-  
+
   // Foto capturada (base64 data URL)
   foto: string
-  
+
   // Dados de referência do produto
   referenceData: ReferenceData
-  
+
   // Estados de conformidade dos itens inspecionados
   inspectionStates: InspectionStates
-  
+
+  // Status final da inspeção (calculado automaticamente)
+  statusFinal: InspectionStatus
+
   // Campos adicionais que podem ser adicionados no futuro
   observacoes?: string
   usuario?: string
