@@ -53,7 +53,7 @@ export default function StatsCard({
 
   return (
     <Card
-      className={cn('p-2 sm:p-2.5 md:p-3 lg:p-4', className)}
+      className={cn('rounded p-2 sm:p-2.5 md:p-3 lg:p-4', className)}
       style={styles.cardBg ? { backgroundColor: styles.cardBg } : undefined}
     >
       <div className="flex flex-col items-center">
@@ -62,7 +62,7 @@ export default function StatsCard({
           className="tabular-nums leading-tight"
           style={{
             color: styles.textColor,
-            fontSize: '22px',
+            fontSize: '28px',
             fontWeight: 'bold'
           }}
         >
