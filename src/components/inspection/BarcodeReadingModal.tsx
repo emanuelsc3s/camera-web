@@ -10,7 +10,8 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2, XCircle, Barcode } from 'lucide-react'
+import { CheckCircle2, XCircle, Barcode, AlertCircle } from 'lucide-react'
+import DatamatrixIcon from '@/components/icons/DatamatrixIcon'
 import type { InspectionItem } from '@/types/inspection'
 
 interface BarcodeReadingModalProps {
@@ -55,12 +56,19 @@ export default function BarcodeReadingModal({
     return ''
   }
 
+  const getBarcodeIcon = () => {
+    if (barcodeType === 'datamatrix') {
+      return <DatamatrixIcon className="w-6 h-6 text-primary" size={24} />
+    }
+    return <Barcode className="w-5 h-5 text-primary" />
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Barcode className="w-5 h-5 text-primary" />
+            {getBarcodeIcon()}
             Registro de Leitura - {getBarcodeLabel()}
           </DialogTitle>
           <DialogDescription className="text-base pt-2">
