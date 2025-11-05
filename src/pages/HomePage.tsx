@@ -1,11 +1,10 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import CameraCard from '@/components/camera/CameraCard'
 import {
   ChevronLeft,
-  Clock3,
   Search,
   XCircle,
   CheckCircle2,
@@ -16,14 +15,6 @@ import {
 
 
 export default function HomePage() {
-
-  const nowLabel = useMemo(() => {
-    const d = new Date()
-    return d.toLocaleString('pt-BR', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    })
-  }, [])
 
   const [lastPhoto, setLastPhoto] = useState<string | null>(null)
 
@@ -76,38 +67,6 @@ export default function HomePage() {
           </CardContent>
         </Card>
 
-        {/* Direita: Dados da leitura */}
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-base font-semibold">
-              <div className="flex items-center justify-between">
-                <span>Dados da leitura</span>
-                <div className="flex items-center gap-2 rounded-full px-3 py-1 text-sm">
-                  <Clock3 className="w-4 h-4 text-muted-foreground" />
-                  <span>{nowLabel}</span>
-                </div>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border border-dashed p-3 space-y-3">
-              <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
-                <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="OP" />
-                <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="Lote" />
-                <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="Validade" />
-              </div>
-              <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="Produto" />
-              <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
-                <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="Registro ANVISA" />
-                <input className="h-9 w-full rounded-md border px-3 text-sm" placeholder="GTIN" />
-              </div>
-
-            </div>
-
-            {/* KPIs */}
-
-          </CardContent>
-        </Card>
       </div>
 
       {/* Pré-visualizações (2 câmeras) */}
