@@ -1,0 +1,391 @@
+# Visão Geral da Integração Firebird
+
+## Introdução
+
+Este documento apresenta uma visão geral da arquitetura de integração entre a aplicação React de inspeção de câmeras e o banco de dados Firebird.
+
+---
+
+## Arquitetura Atual vs. Futura
+
+### Arquitetura Atual (LocalStorage)
+
+```
+┌─────────────────────────────────────────┐
+│         React Frontend                  │
+│  (Vite + TypeScript + TailwindCSS)     │
+│                                         │
+│  ┌───────────────────────────────────┐ │
+│  │ HomePage.tsx                       │ │
+│  │ - Captura fotos                   │ │
+│  │ - Marca conformidades             │ │
+│  │ - Salva no localStorage           │ │
+│  └───────────────────────────────────┘ │
+│                                         │
+│  ┌───────────────────────────────────┐ │
+│  │ ConsultaPage.tsx                  │ │
+│  │ - Lista inspeções                 │ │
+│  │ - Filtra e pagina                 │ │
+│  │ - Exclui registros                │ │
+│  │ - Lê do localStorage              │ │
+│  └───────────────────────────────────┘ │
+│                                         │
+│  ┌───────────────────────────────────┐ │
+│  │ storageService.ts                 │ │
+│  │ - CRUD localStorage               │ │
+│  │ - Fotos em Base64                 │ │
+│  │ - Limite: ~5-10MB                 │ │
+│  └───────────────────────────────────┘ │
+│               ↓↑                        │
+│  ┌───────────────────────────────────┐ │
+│  │     Browser LocalStorage          │ │
+│  │  (Armazenamento limitado)         │ │
+│  └───────────────────────────────────┘ │
+└─────────────────────────────────────────┘
+```
+
+**Limitações:**
+- ❌ Dados armazenados apenas no navegador
+- ❌ Não compartilhável entre dispositivos
+- ❌ Limite de ~5-10MB (problemas com muitas fotos)
+- ❌ Não há backup automático
+- ❌ Vulnerável a limpeza do cache do navegador
+- ❌ Sem controle de acesso ou auditoria
+
+---
+
+### Arquitetura Futura (Firebird + Backend)
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                      React Frontend                              │
+│              (Vite + TypeScript + React Query)                   │
+│                                                                  │
+│  ┌────────────────────┐        ┌──────────────────────────┐    │
+│  │   HomePage.tsx     │        │   ConsultaPage.tsx       │    │
+│  │  - Captura fotos   │        │  - Lista inspeções       │    │
+│  │  - Envia para API  │        │  - Busca da API          │    │
+│  └────────────────────┘        └──────────────────────────┘    │
+│             ↓                              ↓                     │
+│  ┌────────────────────────────────────────────────────────┐    │
+│  │              apiService.ts                              │    │
+│  │  - createInspection()  - getInspections()              │    │
+│  │  - getProductByOP()    - deleteInspection()            │    │
+│  └────────────────────────────────────────────────────────┘    │
+│             ↓                              ↓                     │
+│  ┌────────────────────────────────────────────────────────┐    │
+│  │               api-client.ts (axios)                     │    │
+│  │  - HTTP client configurado                             │    │
+│  │  - Interceptors para erros                             │    │
+│  │  - Retry automático                                    │    │
+│  └────────────────────────────────────────────────────────┘    │
+└───────────────────────────┬──────────────────────────────────────┘
+                            │ HTTP/REST
+                            │ (JSON)
+                            ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                   Backend Node.js + Express                      │
+│                        (Porta 8000)                              │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                     Rotas (routes/)                      │   │
+│  │  - POST   /api/inspecoes          (criar inspeção)      │   │
+│  │  - GET    /api/inspecoes          (listar inspeções)    │   │
+│  │  - GET    /api/inspecoes/:id      (buscar por ID)       │   │
+│  │  - DELETE /api/inspecoes/:id      (excluir inspeção)    │   │
+│  │  - GET    /api/produtos/:op       (buscar produto)      │   │
+│  │  - GET    /api/fotos/:caminho     (servir foto)         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                            ↓                                     │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                Controllers (controllers/)                │   │
+│  │  - Validação de entrada                                 │   │
+│  │  - Tratamento de erros HTTP                             │   │
+│  │  - Chamada aos serviços                                 │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                            ↓                                     │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                 Serviços (services/)                     │   │
+│  │  - Lógica de negócio                                    │   │
+│  │  - Queries SQL para Firebird                            │   │
+│  │  - Processamento de fotos                               │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                            ↓                                     │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │            Pool de Conexões Firebird                     │   │
+│  │  - node-firebird library                                │   │
+│  │  - Gerenciamento de conexões                            │   │
+│  │  - Transaction management                               │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└───────────────────────────┬──────────────────────────────────────┘
+                            │ SQL
+                            ↓
+┌──────────────────────────────────────────────────────────────────┐
+│                    Firebird Database                             │
+│                   (Porta 3050 - padrão)                          │
+│                                                                  │
+│  ┌────────────────────┐        ┌──────────────────────────┐    │
+│  │   TB_PRODUTOS      │        │    TB_INSPECOES          │    │
+│  │  - ID_PRODUTO (PK) │◄───┐   │  - ID_INSPECAO (PK)      │    │
+│  │  - OP              │    │   │  - ID_PRODUTO (FK) ──────┤    │
+│  │  - LOTE            │    └───┤  - DATA_HORA             │    │
+│  │  - VALIDADE        │        │  - CAMINHO_FOTO          │    │
+│  │  - PRODUTO         │        │  - GTIN_CONFORME         │    │
+│  │  - REGISTRO_ANVISA │        │  - DATAMATRIX_CONFORME   │    │
+│  │  - GTIN            │        │  - LOTE_CONFORME         │    │
+│  └────────────────────┘        │  - VALIDADE_CONFORME     │    │
+│                                 │  - OBSERVACOES           │    │
+│                                 │  - USUARIO               │    │
+│                                 └──────────────────────────┘    │
+└──────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────┐
+│                    Sistema de Arquivos                           │
+│                  backend/uploads/fotos/                          │
+│                                                                  │
+│  2025/                                                           │
+│  └── 11/                                                         │
+│      └── 05/                                                     │
+│          ├── 1_1730745123456.jpg                                │
+│          ├── 2_1730745234567.jpg                                │
+│          └── 3_1730745345678.jpg                                │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Benefícios:**
+- ✅ Dados centralizados e persistentes
+- ✅ Compartilhável entre múltiplos dispositivos
+- ✅ Sem limite de armazenamento (depende do servidor)
+- ✅ Backup e recuperação do banco de dados
+- ✅ Controle de acesso e auditoria
+- ✅ Possibilidade de relatórios avançados
+- ✅ Integração com outros sistemas
+
+---
+
+## Fluxo de Dados Principal
+
+### 1. Fluxo de Criação de Inspeção
+
+```
+┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
+│ Usuário  │────►│ Frontend │────►│ Backend  │────►│ Firebird │
+└──────────┘     └──────────┘     └──────────┘     └──────────┘
+     │                 │                 │                 │
+     │  1. Captura    │                 │                 │
+     │     foto       │                 │                 │
+     │                │                 │                 │
+     │  2. Marca      │                 │                 │
+     │  conformidades │                 │                 │
+     │                │                 │                 │
+     │  3. Clica      │                 │                 │
+     │     SALVAR     │                 │                 │
+     │                │                 │                 │
+     │                │ POST /api/      │                 │
+     │                │ inspecoes       │                 │
+     │                │ {foto,dados}    │                 │
+     │                ├────────────────►│                 │
+     │                │                 │                 │
+     │                │                 │ 4. Salva foto   │
+     │                │                 │    no disco     │
+     │                │                 │                 │
+     │                │                 │ 5. INSERT INTO  │
+     │                │                 │    TB_PRODUTOS  │
+     │                │                 ├────────────────►│
+     │                │                 │                 │
+     │                │                 │ 6. ID_PRODUTO   │
+     │                │                 │◄────────────────┤
+     │                │                 │                 │
+     │                │                 │ 7. INSERT INTO  │
+     │                │                 │    TB_INSPECOES │
+     │                │                 ├────────────────►│
+     │                │                 │                 │
+     │                │                 │ 8. ID_INSPECAO  │
+     │                │                 │◄────────────────┤
+     │                │                 │                 │
+     │                │ 200 OK          │                 │
+     │                │ {id,message}    │                 │
+     │                │◄────────────────┤                 │
+     │                │                 │                 │
+     │  9. Toast:     │                 │                 │
+     │  "Sucesso!"    │                 │                 │
+     │◄───────────────┤                 │                 │
+     │                │                 │                 │
+```
+
+### 2. Fluxo de Consulta de Inspeções
+
+```
+┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
+│ Usuário  │────►│ Frontend │────►│ Backend  │────►│ Firebird │
+└──────────┘     └──────────┘     └──────────┘     └──────────┘
+     │                 │                 │                 │
+     │  1. Acessa     │                 │                 │
+     │  ConsultaPage  │                 │                 │
+     │                │                 │                 │
+     │                │ GET /api/       │                 │
+     │                │ inspecoes?      │                 │
+     │                │ page=1&limit=10 │                 │
+     │                ├────────────────►│                 │
+     │                │                 │                 │
+     │                │                 │ 2. SELECT       │
+     │                │                 │    com JOIN     │
+     │                │                 ├────────────────►│
+     │                │                 │                 │
+     │                │                 │ 3. Resultados   │
+     │                │                 │◄────────────────┤
+     │                │                 │                 │
+     │                │ 200 OK          │                 │
+     │                │ {data,total,..} │                 │
+     │                │◄────────────────┤                 │
+     │                │                 │                 │
+     │  4. Exibe      │                 │                 │
+     │     tabela     │                 │                 │
+     │◄───────────────┤                 │                 │
+     │                │                 │                 │
+     │  5. Clica      │                 │                 │
+     │     em foto    │                 │                 │
+     │                │                 │                 │
+     │                │ GET /api/fotos/ │                 │
+     │                │ 2025/11/05/...  │                 │
+     │                ├────────────────►│                 │
+     │                │                 │                 │
+     │                │                 │ 6. Lê arquivo   │
+     │                │                 │    do disco     │
+     │                │                 │                 │
+     │                │ 200 OK          │                 │
+     │                │ (imagem JPEG)   │                 │
+     │                │◄────────────────┤                 │
+     │                │                 │                 │
+     │  7. Exibe      │                 │                 │
+     │     foto modal │                 │                 │
+     │◄───────────────┤                 │                 │
+     │                │                 │                 │
+```
+
+### 3. Fluxo de Busca de Produto (OP)
+
+```
+┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
+│ Usuário  │────►│ Frontend │────►│ Backend  │────►│ Firebird │
+└──────────┘     └──────────┘     └──────────┘     └──────────┘
+     │                 │                 │                 │
+     │  1. Digite OP  │                 │                 │
+     │     "12345"    │                 │                 │
+     │                │                 │                 │
+     │  2. Clica      │                 │                 │
+     │     BUSCAR     │                 │                 │
+     │                │                 │                 │
+     │                │ GET /api/       │                 │
+     │                │ produtos/12345  │                 │
+     │                ├────────────────►│                 │
+     │                │                 │                 │
+     │                │                 │ 3. SELECT       │
+     │                │                 │    WHERE OP=?   │
+     │                │                 ├────────────────►│
+     │                │                 │                 │
+     │                │                 │ 4. Dados        │
+     │                │                 │    produto      │
+     │                │                 │◄────────────────┤
+     │                │                 │                 │
+     │                │ 200 OK          │                 │
+     │                │ {referenceData} │                 │
+     │                │◄────────────────┤                 │
+     │                │                 │                 │
+     │  5. Preenche   │                 │                 │
+     │  ReferenceCard │                 │                 │
+     │◄───────────────┤                 │                 │
+     │                │                 │                 │
+```
+
+---
+
+## Stack Tecnológica Completa
+
+### Frontend
+- **Framework:** React 18
+- **Build Tool:** Vite
+- **Linguagem:** TypeScript
+- **Estilização:** Tailwind CSS + shadcn/ui
+- **State Management:**
+  - React Query (TanStack Query) - Para estado do servidor
+  - useState/useReducer - Para estado local
+- **HTTP Client:** Axios
+- **Formulários:** React Hook Form + Zod
+- **Roteamento:** React Router DOM v6
+
+### Backend
+- **Runtime:** Node.js 18+
+- **Framework:** Express.js
+- **Linguagem:** JavaScript (ES6+)
+- **Firebird Client:** node-firebird
+- **Upload de Arquivos:** multer
+- **CORS:** cors
+- **Variáveis de Ambiente:** dotenv
+- **Logger:** morgan
+- **Validação:** express-validator
+
+### Banco de Dados
+- **SGBD:** Firebird 3.0+
+- **Tabelas:** TB_PRODUTOS, TB_INSPECOES
+- **Armazenamento de Fotos:** Sistema de arquivos
+
+### Ferramentas de Desenvolvimento
+- **Versionamento:** Git
+- **Gerenciador de Pacotes:** npm
+- **Execução Simultânea:** concurrently (para rodar frontend + backend)
+
+---
+
+## Estimativa de Esforço
+
+### Backend (16-24 horas)
+- ⏱️ Configuração inicial do projeto: 2h
+- ⏱️ Configuração Firebird + Pool de conexões: 3h
+- ⏱️ Rotas e Controllers: 4h
+- ⏱️ Serviços de negócio: 5h
+- ⏱️ Upload e gerenciamento de fotos: 3h
+- ⏱️ Testes e ajustes: 3-5h
+
+### Frontend (12-16 horas)
+- ⏱️ Cliente API (axios setup): 2h
+- ⏱️ Serviços e hooks React Query: 4h
+- ⏱️ Adaptação HomePage: 2h
+- ⏱️ Adaptação ConsultaPage: 3h
+- ⏱️ Testes de integração: 3-5h
+
+### Database (2-4 horas)
+- ⏱️ Criação de tabelas: 1h
+- ⏱️ Índices e otimizações: 1h
+- ⏱️ Scripts de migração (se necessário): 1-2h
+
+**Total estimado: 30-44 horas de desenvolvimento**
+
+---
+
+## Riscos e Mitigações
+
+| Risco | Probabilidade | Impacto | Mitigação |
+|-------|---------------|---------|-----------|
+| Estrutura do banco diferente do planejado | Média | Alto | Validar schema antes de iniciar |
+| Problemas com encoding de imagens | Baixa | Médio | Testar upload/download logo no início |
+| Performance com muitas fotos | Média | Alto | Implementar paginação e lazy loading |
+| CORS issues no desenvolvimento | Alta | Baixo | Configurar CORS corretamente desde o início |
+| Limite de tamanho de upload | Média | Médio | Configurar limites adequados no multer |
+| Falha na conexão Firebird | Baixa | Alto | Implementar retry e pool de conexões |
+
+---
+
+## Próximos Documentos
+
+- **02-backend-setup.md** - Configuração completa do backend
+- **03-frontend-integration.md** - Integração no frontend
+- **04-api-endpoints.md** - Documentação detalhada dos endpoints
+- **05-deployment-options.md** - Opções para rodar frontend + backend
+- **06-next-steps.md** - Roadmap e próximos passos
+
+---
+
+**Documento criado em:** 04/11/2025
+**Versão:** 1.0
+**Autor:** Claude Code

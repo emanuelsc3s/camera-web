@@ -22,9 +22,6 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Search,
-  Trash2,
-  Eye,
-  Download,
   X
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -32,10 +29,7 @@ import type { InspectionRecord } from '@/types/inspection'
 import {
   getAllRecords,
   filterRecords,
-  getPaginatedRecords,
-  deleteRecord,
-  deleteMultipleRecords,
-  exportRecordsAsJSON
+  getPaginatedRecords
 } from '@/services/storageService'
 
 export default function ConsultaPage() {
@@ -43,7 +37,6 @@ export default function ConsultaPage() {
   
   // Estados
   const [records, setRecords] = useState<InspectionRecord[]>(getAllRecords())
-  const [selectedRecords, setSelectedRecords] = useState<Set<string>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [searchField, setSearchField] = useState('todos')
@@ -67,84 +60,12 @@ export default function ConsultaPage() {
   // Atualiza lista de registros
   const refreshRecords = () => {
     setRecords(getAllRecords())
-    setSelectedRecords(new Set())
-  }
-
-  // Manipula seleção de registros
-  const toggleRecordSelection = (id: string) => {
-    const newSelection = new Set(selectedRecords)
-    if (newSelection.has(id)) {
-      newSelection.delete(id)
-    } else {
-      newSelection.add(id)
-    }
-    setSelectedRecords(newSelection)
-  }
-
-  // Seleciona/deseleciona todos os registros da página atual
-  const toggleSelectAll = () => {
-    if (selectedRecords.size === paginatedData.data.length) {
-      setSelectedRecords(new Set())
-    } else {
-      const allIds = new Set(paginatedData.data.map(r => r.id))
-      setSelectedRecords(allIds)
-    }
-  }
-
-  // Exclui um registro
-  const handleDeleteRecord = (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este registro?')) {
-      const success = deleteRecord(id)
-      if (success) {
-        toast.success('Registro excluído com sucesso!')
-        refreshRecords()
-      } else {
-        toast.error('Erro ao excluir registro')
-      }
-    }
-  }
-
-  // Exclui múltiplos registros
-  const handleDeleteSelected = () => {
-    if (selectedRecords.size === 0) {
-      toast.error('Selecione ao menos um registro para excluir')
-      return
-    }
-
-    if (confirm(`Tem certeza que deseja excluir ${selectedRecords.size} registro(s)?`)) {
-      const success = deleteMultipleRecords(Array.from(selectedRecords))
-      if (success) {
-        toast.success(`${selectedRecords.size} registro(s) excluído(s) com sucesso!`)
-        refreshRecords()
-      } else {
-        toast.error('Erro ao excluir registros')
-      }
-    }
   }
 
   // Visualiza detalhes de um registro
   const handleViewDetails = (record: InspectionRecord) => {
     setSelectedRecord(record)
     setIsDetailModalOpen(true)
-  }
-
-  // Exporta registros como JSON
-  const handleExportJSON = () => {
-    try {
-      const jsonData = exportRecordsAsJSON()
-      const blob = new Blob([jsonData], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `inspecoes_${Date.now()}.json`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-      toast.success('Registros exportados com sucesso!')
-    } catch (error) {
-      toast.error('Erro ao exportar registros')
-    }
   }
 
   // Renderiza status de conformidade
@@ -174,29 +95,6 @@ export default function ConsultaPage() {
             </Button>
             <h1 className="text-xl font-semibold">Consulta de Inspeções</h1>
           </div>
-          
-          <div className="flex items-center gap-2">
-            {selectedRecords.size > 0 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleDeleteSelected}
-                className="gap-2"
-              >
-                <Trash2 className="w-4 h-4" />
-                Excluir ({selectedRecords.size})
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportJSON}
-              className="gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Exportar JSON
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -209,7 +107,6 @@ export default function ConsultaPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos os campos</SelectItem>
-              <SelectItem value="id">ID</SelectItem>
               <SelectItem value="dataHora">Data/Hora</SelectItem>
               <SelectItem value="op">OP</SelectItem>
               <SelectItem value="lote">Lote</SelectItem>
@@ -257,22 +154,13 @@ export default function ConsultaPage() {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="p-3 text-left">
-                    <input
-                      type="checkbox"
-                      checked={selectedRecords.size === paginatedData.data.length && paginatedData.data.length > 0}
-                      onChange={toggleSelectAll}
-                      className="w-4 h-4"
-                    />
-                  </th>
                   <th className="p-3 text-left">Foto</th>
+                  <th className="p-3 text-left">Status</th>
                   <th className="p-3 text-left">Data/Hora</th>
                   <th className="p-3 text-left">OP</th>
                   <th className="p-3 text-left">Lote</th>
                   <th className="p-3 text-left">Produto</th>
                   <th className="p-3 text-left">GTIN</th>
-                  <th className="p-3 text-left">Status</th>
-                  <th className="p-3 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -287,28 +175,14 @@ export default function ConsultaPage() {
                       }`}
                     >
                       <td className="p-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedRecords.has(record.id)}
-                          onChange={() => toggleRecordSelection(record.id)}
-                          className="w-4 h-4"
-                        />
-                      </td>
-                      <td className="p-3">
                         <img
                           src={record.foto}
                           alt="Foto da inspeção"
-                          className="w-16 h-16 object-cover rounded border cursor-pointer hover:opacity-80"
+                          className="w-16 h-16 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
                           onClick={() => handleViewDetails(record)}
+                          title="Clique para visualizar detalhes"
                         />
                       </td>
-                      <td className="p-3 text-sm">{record.dataHora}</td>
-                      <td className="p-3 text-sm font-mono">{record.referenceData.op}</td>
-                      <td className="p-3 text-sm font-mono">{record.referenceData.lote}</td>
-                      <td className="p-3 text-sm max-w-xs truncate" title={record.referenceData.produto}>
-                        {record.referenceData.produto}
-                      </td>
-                      <td className="p-3 text-sm font-mono">{record.referenceData.gtin}</td>
                       <td className="p-3 text-sm">
                         {hasIssues ? (
                           <span className="text-red-600 dark:text-red-400 font-semibold">Com Problemas</span>
@@ -316,26 +190,13 @@ export default function ConsultaPage() {
                           <span className="text-green-600 dark:text-green-400 font-semibold">OK</span>
                         )}
                       </td>
-                      <td className="p-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleViewDetails(record)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteRecord(record.id)}
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                      <td className="p-3 text-sm">{record.dataHora}</td>
+                      <td className="p-3 text-sm">{record.referenceData.op}</td>
+                      <td className="p-3 text-sm">{record.referenceData.lote}</td>
+                      <td className="p-3 text-sm max-w-xs truncate" title={record.referenceData.produto}>
+                        {record.referenceData.produto}
                       </td>
+                      <td className="p-3 text-sm">{record.referenceData.gtin}</td>
                     </tr>
                   )
                 })}
@@ -361,7 +222,7 @@ export default function ConsultaPage() {
                   setCurrentPage(1)
                 }}
               >
-                <SelectTrigger className="w-[100px]">
+                <SelectTrigger className="w-[130px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -420,17 +281,17 @@ export default function ConsultaPage() {
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Detalhes da Inspeção</DialogTitle>
-            <DialogDescription>
-              Registro ID: {selectedRecord?.id}
+            <DialogTitle className="text-lg">Detalhes da Inspeção</DialogTitle>
+            <DialogDescription className="text-base">
+              Data: {selectedRecord?.dataHora}
             </DialogDescription>
           </DialogHeader>
-          
+
           {selectedRecord && (
             <div className="space-y-4">
               {/* Foto */}
               <div>
-                <h3 className="font-semibold mb-2">Foto Capturada</h3>
+                <h3 className="font-semibold mb-2 text-base">Foto Capturada</h3>
                 <img
                   src={selectedRecord.foto}
                   alt="Foto da inspeção"
@@ -440,23 +301,23 @@ export default function ConsultaPage() {
 
               {/* Informações Gerais */}
               <div>
-                <h3 className="font-semibold mb-2">Informações Gerais</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <h3 className="font-semibold mb-2 text-base">Informações Gerais</h3>
+                <div className="grid grid-cols-2 gap-3 text-base">
                   <div>
                     <span className="text-muted-foreground">Data/Hora:</span>
                     <p className="font-medium">{selectedRecord.dataHora}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">ID:</span>
-                    <p className="font-mono text-xs">{selectedRecord.id}</p>
+                    <p className="font-medium">{selectedRecord.id}</p>
                   </div>
                 </div>
               </div>
 
               {/* Dados do Produto */}
               <div>
-                <h3 className="font-semibold mb-2">Dados do Produto</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <h3 className="font-semibold mb-2 text-base">Dados do Produto</h3>
+                <div className="grid grid-cols-2 gap-3 text-base">
                   <div>
                     <span className="text-muted-foreground">OP:</span>
                     <p className="font-medium">{selectedRecord.referenceData.op}</p>
@@ -471,7 +332,7 @@ export default function ConsultaPage() {
                   </div>
                   <div>
                     <span className="text-muted-foreground">GTIN:</span>
-                    <p className="font-mono">{selectedRecord.referenceData.gtin}</p>
+                    <p className="font-medium">{selectedRecord.referenceData.gtin}</p>
                   </div>
                   <div className="col-span-2">
                     <span className="text-muted-foreground">Produto:</span>
@@ -486,8 +347,8 @@ export default function ConsultaPage() {
 
               {/* Resultados da Inspeção */}
               <div>
-                <h3 className="font-semibold mb-2">Resultados da Inspeção</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <h3 className="font-semibold mb-2 text-base">Resultados da Inspeção</h3>
+                <div className="grid grid-cols-2 gap-3 text-base">
                   <div>
                     <span className="text-muted-foreground">GTIN:</span>
                     <p>{renderConformityStatus(selectedRecord.inspectionStates.gtin)}</p>
