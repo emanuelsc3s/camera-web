@@ -50,7 +50,7 @@ export function useInspectionStats(): InspectionStats {
     // Função para calcular as estatísticas
     const calculateStats = () => {
       const records: InspectionRecord[] = getAllRecords()
-      
+
       const total = records.length
       const aprovados = records.filter(record => record.statusFinal === 'APROVADO').length
       const reprovados = records.filter(record => record.statusFinal === 'REPROVADO').length
@@ -65,7 +65,7 @@ export function useInspectionStats(): InspectionStats {
     // Calcula as estatísticas inicialmente
     calculateStats()
 
-    // Listener para detectar mudanças no localStorage
+    // Listener para detectar mudanças no localStorage de outras abas/janelas
     const handleStorageChange = (e: StorageEvent) => {
       // Recalcula apenas se a chave 'inspection_records' foi modificada
       if (e.key === 'inspection_records' || e.key === null) {
@@ -73,12 +73,19 @@ export function useInspectionStats(): InspectionStats {
       }
     }
 
-    // Adiciona listener para mudanças no localStorage
-    window.addEventListener('storage', handleStorageChange)
+    // Listener para detectar mudanças no localStorage da mesma aba (evento customizado)
+    const handleCustomUpdate = () => {
+      calculateStats()
+    }
 
-    // Cleanup: remove listener quando o componente for desmontado
+    // Adiciona listeners
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('inspectionRecordsUpdated', handleCustomUpdate)
+
+    // Cleanup: remove listeners quando o componente for desmontado
     return () => {
       window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('inspectionRecordsUpdated', handleCustomUpdate)
     }
   }, [])
 

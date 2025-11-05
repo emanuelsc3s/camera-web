@@ -17,15 +17,19 @@ export function saveInspectionRecord(record: InspectionRecord): boolean {
     const records = getAllRecords()
     records.push(record)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(records))
+
+    // Dispara evento customizado para notificar componentes sobre a atualização
+    window.dispatchEvent(new CustomEvent('inspectionRecordsUpdated'))
+
     return true
   } catch (error) {
     console.error('Erro ao salvar registro de inspeção:', error)
-    
+
     // Verifica se o erro é por falta de espaço no localStorage
     if (error instanceof DOMException && error.name === 'QuotaExceededError') {
       throw new Error('Espaço de armazenamento insuficiente. Considere excluir registros antigos.')
     }
-    
+
     return false
   }
 }
@@ -69,6 +73,10 @@ export function deleteRecord(id: string): boolean {
     const records = getAllRecords()
     const filteredRecords = records.filter(record => record.id !== id)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredRecords))
+
+    // Dispara evento customizado para notificar componentes sobre a atualização
+    window.dispatchEvent(new CustomEvent('inspectionRecordsUpdated'))
+
     return true
   } catch (error) {
     console.error('Erro ao excluir registro de inspeção:', error)
@@ -86,6 +94,10 @@ export function deleteMultipleRecords(ids: string[]): boolean {
     const records = getAllRecords()
     const filteredRecords = records.filter(record => !ids.includes(record.id))
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredRecords))
+
+    // Dispara evento customizado para notificar componentes sobre a atualização
+    window.dispatchEvent(new CustomEvent('inspectionRecordsUpdated'))
+
     return true
   } catch (error) {
     console.error('Erro ao excluir registros de inspeção:', error)
@@ -100,6 +112,10 @@ export function deleteMultipleRecords(ids: string[]): boolean {
 export function clearAllRecords(): boolean {
   try {
     localStorage.removeItem(STORAGE_KEY)
+
+    // Dispara evento customizado para notificar componentes sobre a atualização
+    window.dispatchEvent(new CustomEvent('inspectionRecordsUpdated'))
+
     return true
   } catch (error) {
     console.error('Erro ao limpar registros de inspeção:', error)
@@ -274,20 +290,24 @@ export function exportRecordsAsJSON(): string {
 export function importRecordsFromJSON(jsonString: string): boolean {
   try {
     const records = JSON.parse(jsonString) as InspectionRecord[]
-    
+
     // Valida se é um array
     if (!Array.isArray(records)) {
       throw new Error('Formato inválido: esperado um array de registros')
     }
-    
+
     // Mescla com registros existentes (evita duplicatas por ID)
     const existingRecords = getAllRecords()
     const existingIds = new Set(existingRecords.map(r => r.id))
-    
+
     const newRecords = records.filter(r => !existingIds.has(r.id))
     const mergedRecords = [...existingRecords, ...newRecords]
-    
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedRecords))
+
+    // Dispara evento customizado para notificar componentes sobre a atualização
+    window.dispatchEvent(new CustomEvent('inspectionRecordsUpdated'))
+
     return true
   } catch (error) {
     console.error('Erro ao importar registros:', error)
