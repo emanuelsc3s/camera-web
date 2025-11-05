@@ -13,6 +13,7 @@ import {
 import ReferenceDataCard from '@/components/inspection/ReferenceDataCard'
 import PhotoCaptureModal from '@/components/inspection/PhotoCaptureModal'
 import GabaritoModal from '@/components/inspection/GabaritoModal'
+import BarcodeReadingModal from '@/components/inspection/BarcodeReadingModal'
 import StatsCard from '@/components/inspection/StatsCard'
 import {
   ChevronLeft,
@@ -35,6 +36,8 @@ export default function HomePage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isGabaritoModalOpen, setIsGabaritoModalOpen] = useState(false)
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
+  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false)
+  const [currentBarcodeType, setCurrentBarcodeType] = useState<InspectionItem | null>(null)
   const [inspectionStates, setInspectionStates] = useState<Record<InspectionItem, ConformityState>>({
     gtin: null,
     datamatrix: null,
@@ -58,7 +61,16 @@ export default function HomePage() {
   }
 
   // Alterna entre: null -> true (conforme) -> false (não conforme) -> null
+  // Para GTIN e Datamatrix, abre o modal de leitura de código de barras
   const toggleInspectionState = (item: InspectionItem) => {
+    // Se for GTIN ou Datamatrix, abre o modal
+    if (item === 'gtin' || item === 'datamatrix') {
+      setCurrentBarcodeType(item)
+      setIsBarcodeModalOpen(true)
+      return
+    }
+
+    // Para outros itens, mantém o comportamento de toggle
     setInspectionStates(prev => {
       const currentState = prev[item]
       let newState: ConformityState
@@ -73,6 +85,20 @@ export default function HomePage() {
 
       return { ...prev, [item]: newState }
     })
+  }
+
+  // Callback para decisão do modal de código de barras
+  const handleBarcodeDecision = (approved: boolean, value: string) => {
+    if (currentBarcodeType) {
+      setInspectionStates(prev => ({
+        ...prev,
+        [currentBarcodeType]: approved
+      }))
+
+      const action = approved ? 'aprovado' : 'reprovado'
+      const label = currentBarcodeType === 'gtin' ? 'GTIN' : 'Datamatrix'
+      toast.success(`${label} ${action}: ${value}`)
+    }
   }
 
   /**
@@ -355,6 +381,14 @@ export default function HomePage() {
       <GabaritoModal
         open={isGabaritoModalOpen}
         onOpenChange={setIsGabaritoModalOpen}
+      />
+
+      {/* Modal de leitura de código de barras */}
+      <BarcodeReadingModal
+        open={isBarcodeModalOpen}
+        onOpenChange={setIsBarcodeModalOpen}
+        barcodeType={currentBarcodeType}
+        onDecision={handleBarcodeDecision}
       />
 
       {/* Modal de confirmação de salvamento */}
