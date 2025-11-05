@@ -1,0 +1,2 @@
+Este é um arquivo de exemplo para o Gabarito 2.
+Em produção, este seria um arquivo PDF real.
