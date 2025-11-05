@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import ReferenceDataCard from '@/components/inspection/ReferenceDataCard'
 import PhotoCaptureModal from '@/components/inspection/PhotoCaptureModal'
+import StatsCard from '@/components/inspection/StatsCard'
 import {
   ChevronLeft,
   Search,
@@ -19,13 +20,16 @@ import {
   CheckCircle2,
   Camera,
   Save,
-  AlertCircle
+  AlertCircle,
+  ClipboardList
 } from 'lucide-react'
 import type { InspectionItem, ConformityState, InspectionRecord, InspectionStatus } from '@/types/inspection'
 import { saveInspectionRecord, generateRecordId, formatDateTime } from '@/services/storageService'
+import { useInspectionStats } from '@/hooks/useInspectionStats'
 
 export default function HomePage() {
   const navigate = useNavigate()
+  const stats = useInspectionStats()
   const [lastPhoto, setLastPhoto] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
@@ -168,6 +172,30 @@ export default function HomePage() {
         {/* Área de conteúdo principal - ocupa espaço disponível */}
         <div className="flex-1 overflow-hidden p-2 sm:p-4">
           <div className="h-full flex flex-col gap-2 sm:gap-3">
+            {/* Seção de Estatísticas - altura fixa */}
+            <div className="flex-none">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+                <StatsCard
+                  title="Inspecionados"
+                  value={stats.total}
+                  icon={ClipboardList}
+                  variant="default"
+                />
+                <StatsCard
+                  title="Aprovados"
+                  value={stats.aprovados}
+                  icon={CheckCircle2}
+                  variant="success"
+                />
+                <StatsCard
+                  title="Reprovados"
+                  value={stats.reprovados}
+                  icon={XCircle}
+                  variant="danger"
+                />
+              </div>
+            </div>
+
             {/* Área de dados de referência e preview - ocupa espaço disponível */}
             <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3">
               {/* Dados de Referência (lado esquerdo) */}
