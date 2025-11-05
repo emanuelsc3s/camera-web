@@ -24,7 +24,6 @@ import {
   Search,
   X
 } from 'lucide-react'
-import { toast } from 'sonner'
 import type { InspectionRecord } from '@/types/inspection'
 import {
   getAllRecords,
@@ -36,7 +35,7 @@ export default function ConsultaPage() {
   const navigate = useNavigate()
   
   // Estados
-  const [records, setRecords] = useState<InspectionRecord[]>(getAllRecords())
+  const [records] = useState<InspectionRecord[]>(getAllRecords())
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [searchField, setSearchField] = useState('todos')
@@ -56,11 +55,6 @@ export default function ConsultaPage() {
   const paginatedData = useMemo(() => {
     return getPaginatedRecords({ page: currentPage, pageSize }, filteredRecords)
   }, [currentPage, pageSize, filteredRecords])
-
-  // Atualiza lista de registros
-  const refreshRecords = () => {
-    setRecords(getAllRecords())
-  }
 
   // Visualiza detalhes de um registro
   const handleViewDetails = (record: InspectionRecord) => {

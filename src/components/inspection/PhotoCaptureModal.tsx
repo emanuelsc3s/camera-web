@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -127,7 +127,7 @@ export default function PhotoCaptureModal({
                         <div className="text-center">
                           <Camera className="w-16 h-16 mb-4 mx-auto opacity-50" />
                           <p className="text-sm mb-4">Câmera desligada</p>
-                          <Button onClick={startCamera} size="sm">
+                          <Button onClick={() => startCamera()} size="sm">
                             <Camera className="w-4 h-4 mr-2" />
                             Iniciar Câmera
                           </Button>

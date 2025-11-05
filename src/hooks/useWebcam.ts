@@ -93,18 +93,22 @@ export function useWebcam(): UseWebcamReturn {
 
 
   // Log de debug (silenciado)
-  const debugLog = useCallback((_message: string, _data?: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const debugLog = useCallback((..._args: unknown[]) => {
     // silenciado conforme solicitado
   }, [])
 
 
   // Registro de tentativas para feedback ao usuário
   const attemptSummaryRef = useRef<string[]>([])
-  const resetAttemptLog = () => { attemptSummaryRef.current = [] }
-  const logAttempt = (msg: string) => {
+  const resetAttemptLog = useCallback(() => {
+    attemptSummaryRef.current = []
+  }, [])
+
+  const logAttempt = useCallback((msg: string) => {
     attemptSummaryRef.current.push(msg)
-    debugLog(msg)
-  }
+    debugLog()
+  }, [debugLog])
 
   // Listar dispositivos de câmera disponíveis
   const getDevices = useCallback(async () => {
@@ -154,7 +158,11 @@ export function useWebcam(): UseWebcamReturn {
   const setResolutionMode = useCallback(async (mode: ResolutionMode) => {
     debugLog('Alterando modo de resolução...', { mode })
     _setResolutionMode(mode)
-    try { localStorage.setItem('camera.resolutionMode', mode) } catch {}
+    try {
+      localStorage.setItem('camera.resolutionMode', mode)
+    } catch {
+      // Falha ao salvar preferência no localStorage
+    }
 
 
     const current = streamRef.current
@@ -165,7 +173,16 @@ export function useWebcam(): UseWebcamReturn {
       if (mode === 'fullhd') {
         await track.applyConstraints({ width: { ideal: 1920 }, height: { ideal: 1080 } })
       } else if (mode === 'max') {
-        const caps: any = (track as any).getCapabilities ? (track as any).getCapabilities() : undefined
+        interface VideoCapabilities {
+          width?: { max?: number }
+          height?: { max?: number }
+        }
+
+        const trackWithCapabilities = track as MediaStreamTrack & {
+          getCapabilities?: () => VideoCapabilities
+        }
+
+        const caps = trackWithCapabilities.getCapabilities ? trackWithCapabilities.getCapabilities() : undefined
         if (caps?.width?.max && caps?.height?.max) {
           await track.applyConstraints({ width: caps.width.max, height: caps.height.max })
         }
@@ -187,19 +204,20 @@ export function useWebcam(): UseWebcamReturn {
     for (const device of availableDevices) {
       try {
         logAttempt(`Tentando câmera alternativa: ${device.label}`)
-        const constraints = { video: { deviceId: { exact: device.deviceId } } }
+        const constraints = { video: { deviceId: { ideal: device.deviceId } } }
         const mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
         logAttempt(`✅ Sucesso com câmera alternativa: ${device.label}`)
         return mediaStream
-      } catch (err: any) {
-        logAttempt(`Falha com câmera ${device.label}: ${err?.name || 'Erro desconhecido'}`)
+      } catch (err) {
+        const error = err as Error & { name?: string }
+        logAttempt(`Falha com câmera ${device.label}: ${error?.name || 'Erro desconhecido'}`)
         debugLog(`Falha com câmera ${device.label}:`, err)
         continue
       }
     }
 
     throw new Error('Todas as câmeras falharam')
-  }, [devices, debugLog])
+  }, [devices, debugLog, logAttempt])
 
   // Tentar todas as câmeras disponíveis
   const tryAllCameras = useCallback(async (): Promise<MediaStream> => {
@@ -221,8 +239,8 @@ export function useWebcam(): UseWebcamReturn {
           ...baseConstraints,
           video: typeof baseConstraints.video === 'object' ? {
             ...baseConstraints.video,
-            deviceId: { exact: device.deviceId }
-          } : { deviceId: { exact: device.deviceId } }
+            deviceId: { ideal: device.deviceId }
+          } : { deviceId: { ideal: device.deviceId } }
         }
 
         try {
@@ -231,9 +249,10 @@ export function useWebcam(): UseWebcamReturn {
           debugLog(`✅ Sucesso com ${device.label}!`)
           logAttempt(`✅ Sucesso com ${device.label}`)
           return mediaStream
-        } catch (err: any) {
+        } catch (err) {
+          const error = err as Error & { name?: string }
           debugLog(`  Falha constraint ${constraintIndex + 1} para ${device.label}:`, err)
-          logAttempt(`Falha (${err?.name || 'Erro'}) em ${device.label} [tentativa ${constraintIndex + 1}]`)
+          logAttempt(`Falha (${error?.name || 'Erro'}) em ${device.label} [tentativa ${constraintIndex + 1}]`)
 
           // Para NotReadableError, aguardar antes da próxima tentativa com backoff exponencial + jitter
           if (err instanceof Error && err.name === 'NotReadableError') {
@@ -246,7 +265,7 @@ export function useWebcam(): UseWebcamReturn {
     }
 
     throw new Error(`Todas as ${devices.length} câmeras falharam com todos os constraints`)
-  }, [devices, debugLog])
+  }, [devices, debugLog, logAttempt, resetAttemptLog])
 
   // Tentar inicializar stream com configurações progressivas
   const tryGetUserMedia = useCallback(async (deviceId?: string, retryCount = 0): Promise<MediaStream> => {
@@ -262,7 +281,7 @@ export function useWebcam(): UseWebcamReturn {
         const baseConstraints = CAMERA_CONSTRAINTS[Math.min(retryCount, CAMERA_CONSTRAINTS.length - 1)]
         const genericConstraints: MediaStreamConstraints =
           typeof baseConstraints.video === 'object'
-            ? { video: { ...(baseConstraints.video as any) } }
+            ? { video: { ...(baseConstraints.video as Record<string, unknown>) } }
             : { video: true }
 
         debugLog(`Tentativa ${retryCount + 1}/${CAMERA_CONSTRAINTS.length} com constraints genéricos:`, genericConstraints)
@@ -311,14 +330,14 @@ export function useWebcam(): UseWebcamReturn {
 
     // Se o modo for FULL HD, força ideal 1920x1080 ao solicitar o stream
     if (resolutionMode === 'fullhd') {
-      (videoConstraintsBase as any).width = { ideal: 1920 }
-      ;(videoConstraintsBase as any).height = { ideal: 1080 }
+      (videoConstraintsBase as Record<string, unknown>).width = { ideal: 1920 }
+      ;(videoConstraintsBase as Record<string, unknown>).height = { ideal: 1080 }
     }
 
     const constraints: MediaStreamConstraints = {
       video: {
-        ...(videoConstraintsBase as any),
-        deviceId: { exact: deviceId }
+        ...(videoConstraintsBase as Record<string, unknown>),
+        deviceId: { ideal: deviceId }
       }
     }
 
@@ -352,7 +371,7 @@ export function useWebcam(): UseWebcamReturn {
 
       return tryGetUserMedia(deviceId, retryCount + 1)
     }
-  }, [debugLog, devices, tryWithDifferentCameras, tryAllCameras, resolutionMode, getDevices])
+  }, [debugLog, devices, tryWithDifferentCameras, tryAllCameras, resolutionMode, getDevices, logAttempt])
 
   // Iniciar câmera com retry inteligente (à prova de chamadas simultâneas/StrictMode)
   const startCamera = useCallback(async (deviceId?: string) => {
@@ -396,7 +415,16 @@ export function useWebcam(): UseWebcamReturn {
         if (resolutionMode === 'fullhd') {
           await track.applyConstraints({ width: { ideal: 1920 }, height: { ideal: 1080 } })
         } else if (resolutionMode === 'max') {
-          const caps: any = (track as any).getCapabilities ? (track as any).getCapabilities() : undefined
+          interface VideoCapabilities {
+            width?: { max?: number }
+            height?: { max?: number }
+          }
+
+          const trackWithCapabilities = track as MediaStreamTrack & {
+            getCapabilities?: () => VideoCapabilities
+          }
+
+          const caps = trackWithCapabilities.getCapabilities ? trackWithCapabilities.getCapabilities() : undefined
           if (caps?.width?.max && caps?.height?.max) {
             await track.applyConstraints({ width: caps.width.max, height: caps.height.max })
           }
@@ -408,7 +436,11 @@ export function useWebcam(): UseWebcamReturn {
       // Conectar stream ao elemento de vídeo
       if (videoRef.current) {
         const video = videoRef.current
-        try { video.pause() } catch {}
+        try {
+          video.pause()
+        } catch {
+          // Falha ao pausar vídeo (pode não estar reproduzindo)
+        }
         video.srcObject = null
         video.srcObject = mediaStream
 
@@ -437,8 +469,9 @@ export function useWebcam(): UseWebcamReturn {
           video.play().then(resolve).catch(playErr => {
             debugLog('Erro ao reproduzir vídeo:', playErr)
             // Se uma nova carga foi iniciada (StrictMode/duas chamadas), ignore AbortError
-            const name = (playErr as any)?.name
-            if (name === 'AbortError' || (playErr as any)?.code === 20) {
+            const error = playErr as Error & { name?: string; code?: number }
+            const name = error?.name
+            if (name === 'AbortError' || error?.code === 20) {
               if (startSeqRef.current !== mySeq) {
                 resolve()
                 return
@@ -465,7 +498,9 @@ export function useWebcam(): UseWebcamReturn {
       // Persistir dispositivo selecionado
       try {
         localStorage.setItem('camera.selectedDeviceId', (actualDeviceId || desiredDeviceId || '') as string)
-      } catch {}
+      } catch {
+        // Falha ao salvar dispositivo no localStorage
+      }
 
       setIsStreamActive(true)
 
@@ -477,12 +512,13 @@ export function useWebcam(): UseWebcamReturn {
       // Atualizar lista de dispositivos após obter permissões
       await getDevices()
 
-    } catch (err: any) {
+    } catch (err) {
+      const error = err as Error & { name?: string; message?: string }
       debugLog('Erro final ao iniciar câmera:', err)
       console.error('Erro ao acessar webcam:', err)
 
       // Se a chamada atual for obsoleta, não apresente erro ao usuário
-      if (err?.name === 'AbortError' && startSeqRef.current !== mySeq) {
+      if (error?.name === 'AbortError' && startSeqRef.current !== mySeq) {
         return
       }
 
@@ -490,8 +526,8 @@ export function useWebcam(): UseWebcamReturn {
       const attempts = attemptSummaryRef.current
       const attemptsText = attempts.length ? `\n\nTentativas realizadas:\n• ${attempts.slice(0, 8).join('\n• ')}` : ''
 
-      if (err instanceof Error) {
-        switch (err.name) {
+      if (error instanceof Error) {
+        switch (error.name) {
           case 'NotAllowedError':
             errorMessage = 'Acesso à webcam negado. Clique no ícone da câmera na barra de endereços e permita o acesso.'
             break
@@ -515,7 +551,7 @@ O que você pode fazer agora:
             errorMessage = 'Configurações da câmera não suportadas. Tente uma câmera diferente.'
             break
           default:
-            if (err.message?.includes('Todas as tentativas') || err.message?.includes('Todas as câmeras')) {
+            if (error.message?.includes('Todas as tentativas') || error.message?.includes('Todas as câmeras')) {
               errorMessage = `Todas as câmeras falharam.
 
 🔧 Verificações:
@@ -526,7 +562,7 @@ O que você pode fazer agora:
 
 ${devices.length} câmera${devices.length > 1 ? 's' : ''} detectada${devices.length > 1 ? 's' : ''}${attemptsText}`
             } else {
-              errorMessage = `Erro ao acessar webcam: ${err.message}${attemptsText}`
+              errorMessage = `Erro ao acessar webcam: ${error.message}${attemptsText}`
             }
         }
       }
@@ -537,7 +573,7 @@ ${devices.length} câmera${devices.length > 1 ? 's' : ''} detectada${devices.len
     } finally {
       setIsLoading(false)
     }
-  }, [cleanupStream, tryGetUserMedia, getDevices, debugLog])
+  }, [cleanupStream, tryGetUserMedia, getDevices, debugLog, devices, resolutionMode, resetAttemptLog])
 
   // Parar câmera
   const stopCamera = useCallback(() => {
@@ -615,7 +651,7 @@ ${devices.length} câmera${devices.length > 1 ? 's' : ''} detectada${devices.len
       debugLog('Componente desmontando, limpando recursos...')
       cleanupStream()
     }
-  }, [])
+  }, [debugLog, cleanupStream])
 
   // Carregar dispositivos na inicialização (sem iniciar câmera automaticamente)
   useEffect(() => {
