@@ -20,8 +20,7 @@ import {
   CheckCircle2,
   Camera,
   Save,
-  AlertCircle,
-  ClipboardList
+  AlertCircle
 } from 'lucide-react'
 import type { InspectionItem, ConformityState, InspectionRecord, InspectionStatus } from '@/types/inspection'
 import { saveInspectionRecord, generateRecordId, formatDateTime } from '@/services/storageService'
@@ -178,19 +177,16 @@ export default function HomePage() {
                 <StatsCard
                   title="Inspecionados"
                   value={stats.total}
-                  icon={ClipboardList}
                   variant="default"
                 />
                 <StatsCard
                   title="Aprovados"
                   value={stats.aprovados}
-                  icon={CheckCircle2}
                   variant="success"
                 />
                 <StatsCard
                   title="Reprovados"
                   value={stats.reprovados}
-                  icon={XCircle}
                   variant="danger"
                 />
               </div>

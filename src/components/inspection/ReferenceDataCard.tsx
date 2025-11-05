@@ -38,30 +38,6 @@ export default function ReferenceDataCard({ data }: ReferenceDataCardProps) {
             <DataField label="Registro ANVISA" value={data.registroAnvisa} />
             <DataField label="GTIN" value={data.gtin} />
           </div>
-
-          {/* Informação adicional */}
-          <div className="mt-3 sm:mt-4 md:mt-6 pt-2.5 sm:pt-3 md:pt-4 border-t">
-            <div className="flex items-start gap-2 text-xs sm:text-sm text-muted-foreground">
-              <div className="flex-none mt-0.5">
-                <svg
-                  className="w-3.5 h-3.5 sm:w-4 sm:h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <p className="flex-1">
-                Capture uma foto do produto e marque a conformidade de cada item de inspeção comparando com estes dados de referência.
-              </p>
-            </div>
-          </div>
         </div>
       </div>
     </div>
