@@ -175,7 +175,6 @@ export default function HomePage() {
 
             <div className="flex items-center gap-1 sm:gap-2">
               <Button
-                variant="outline"
                 size="sm"
                 className="gap-1 sm:gap-2 text-xs sm:text-sm"
                 onClick={() => setIsModalOpen(true)}
