@@ -40,11 +40,11 @@ export default function StatsCard({
       textColor: '#104d69' // Cor de fonte aplicada
     },
     success: {
-      cardBg: '#f7a6a6', // Cor de fundo específica para o card "Aprovados"
+      cardBg: '#9ed79e', // Cor de fundo específica para o card "Aprovados"
       textColor: '#104d69' // Cor de fonte aplicada
     },
     danger: {
-      cardBg: '#9ed79e', // Cor de fundo específica para o card "Reprovados"
+      cardBg: '#f7a6a6', // Cor de fundo específica para o card "Reprovados"
       textColor: '#104d69' // Cor de fonte aplicada
     }
   }

@@ -316,7 +316,11 @@ export default function HomePage() {
         <footer className="flex-none border-t bg-background">
           <div className="h-14 sm:h-15 md:h-16 flex items-center justify-between px-2 sm:px-3 md:px-4 gap-2">
             <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
-              <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 md:gap-2 text-xs sm:text-sm">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1 sm:gap-1.5 md:gap-2 text-xs sm:text-sm text-primary hover:text-primary"
+              >
                 <ChevronLeft className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4" />
                 <span className="hidden sm:inline">VOLTAR</span>
                 <span className="sm:hidden">Voltar</span>
