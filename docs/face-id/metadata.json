@@ -1,0 +1,7 @@
+{
+  "name": "SecureFace Local",
+  "description": "Sistema de reconhecimento facial e cadastro rodando 100% no navegador (client-side) sem envio de dados para nuvem.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ScanFace } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -124,16 +124,26 @@ export default function LoginPage() {
               </div>
             )}
 
-            <Button
-              type="submit"
-              className="w-full mt-2"
-              disabled={isLoading}
-            >
-              {isLoading && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-              )}
-              <span>{isLoading ? 'Entrando...' : 'Entrar'}</span>
-            </Button>
+            <div className="flex flex-row gap-2 mt-2">
+              <Button
+                type="submit"
+                className="flex-1"
+                disabled={isLoading}
+              >
+                {isLoading && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                )}
+                <span>{isLoading ? 'Entrando...' : 'Entrar'}</span>
+              </Button>
+
+              <Button
+                type="button"
+                className="flex-1"
+              >
+                <ScanFace className="mr-2 h-4 w-4" aria-hidden="true" />
+                <span>Face ID</span>
+              </Button>
+            </div>
           </form>
         </CardContent>
 
