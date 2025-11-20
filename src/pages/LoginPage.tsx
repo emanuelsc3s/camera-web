@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
+import { FaceIdModal } from '@/components/face-id/FaceIdModal'
 
 // Esquema de validação do formulário de login usando Zod
 const loginSchema = z.object({
@@ -28,17 +29,19 @@ export type LoginFormValues = z.infer<typeof loginSchema>
 export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, isAuthenticated, isLoading, loginError } = useAuth()
+  const { login, isAuthenticated, isLoading, loginError, token } = useAuth()
+  const [faceIdModalOpen, setFaceIdModalOpen] = useState(false)
+  const isFaceIdSession = Boolean(token?.startsWith('faceid:'))
 
   // Caminho para redirecionar após login bem-sucedido (padrão: home)
   const fromPath = (location.state as { from?: string } | null)?.from ?? '/'
 
   // Se o usuário já estiver autenticado, evita exibir tela de login
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !isFaceIdSession) {
       navigate(fromPath, { replace: true })
     }
-  }, [isAuthenticated, fromPath, navigate])
+  }, [isAuthenticated, isFaceIdSession, fromPath, navigate])
 
   const {
     register,
@@ -139,6 +142,7 @@ export default function LoginPage() {
               <Button
                 type="button"
                 className="flex-1"
+                onClick={() => setFaceIdModalOpen(true)}
               >
                 <ScanFace className="mr-2 h-4 w-4" aria-hidden="true" />
                 <span>Face ID</span>
@@ -155,6 +159,11 @@ export default function LoginPage() {
           </p>
         </CardFooter>
       </Card>
+
+      <FaceIdModal
+        open={faceIdModalOpen}
+        onOpenChange={setFaceIdModalOpen}
+      />
     </div>
   )
 }
