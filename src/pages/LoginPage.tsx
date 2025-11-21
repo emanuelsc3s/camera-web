@@ -36,11 +36,13 @@ export default function LoginPage() {
   // Caminho para redirecionar após login bem-sucedido (padrão: home)
   const fromPath = (location.state as { from?: string } | null)?.from ?? '/'
 
-  // Se o usuário já estiver autenticado, evita exibir tela de login
+  // Se o usuário já estiver autenticado, evita exibir tela de login.
+  // Para sessões do Face ID, redireciona direto para a Home.
   useEffect(() => {
-    if (isAuthenticated && !isFaceIdSession) {
-      navigate(fromPath, { replace: true })
-    }
+    if (!isAuthenticated) return
+
+    const targetPath = isFaceIdSession ? '/' : fromPath
+    navigate(targetPath, { replace: true })
   }, [isAuthenticated, isFaceIdSession, fromPath, navigate])
 
   const {

@@ -20,6 +20,8 @@ export interface AuthUser {
   name: string
   /** E-mail do usuário autenticado */
   email: string
+  /** URL da foto do usuário, quando disponível */
+  photoUrl?: string
 }
 
 export interface AuthSession {
@@ -85,4 +87,3 @@ export function clearAuthSession(): void {
 export function hasActiveAuthSession(): boolean {
   return getAuthSession() !== null
 }
-

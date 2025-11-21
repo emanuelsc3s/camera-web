@@ -86,6 +86,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             id: faceUser.id,
             name: faceUser.name,
             email: faceUser.matricula || faceUser.name,
+            photoUrl: faceUser.photoUrl,
           }
         : {
             id: credentials.emailOrUsername,
