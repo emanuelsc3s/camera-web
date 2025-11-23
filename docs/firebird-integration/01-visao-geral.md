@@ -4,6 +4,23 @@
 
 Este documento apresenta uma visão geral da arquitetura de integração entre a aplicação React de inspeção de câmeras e o banco de dados Firebird.
 
+## Índice da Documentação
+
+### Documentação Geral
+- **[00-mapeamento-sistema-atual.md](./00-mapeamento-sistema-atual.md)** - Mapeamento do sistema atual (LocalStorage → Firebird)
+- **[01-visao-geral.md](./01-visao-geral.md)** - Este documento (visão geral da arquitetura)
+- **[02-backend-setup.md](./02-backend-setup.md)** - Configuração do backend Node.js + Express
+- **[03-database-schema.md](./03-database-schema.md)** - Esquema do banco de dados Firebird
+- **[04-api-endpoints.md](./04-api-endpoints.md)** - Documentação dos endpoints REST
+- **[05-frontend-integration.md](./05-frontend-integration.md)** - Integração do frontend com a API
+- **[06-deployment.md](./06-deployment.md)** - Guia de deploy e configuração
+
+### Documentação Face ID (Sistema de Reconhecimento Facial)
+- **[07-face-id-backend-api.md](./07-face-id-backend-api.md)** - API REST para reconhecimento facial (8 endpoints)
+- **[08-face-id-database-schema.md](./08-face-id-database-schema.md)** - Modelagem completa do banco de dados (TBUSUARIO_FACEID, TBFACEID_TENTATIVA)
+- **[09-face-id-backend-implementation.md](./09-face-id-backend-implementation.md)** - Implementação completa do backend (services, controllers, utils)
+- **[10-face-id-security-flows.md](./10-face-id-security-flows.md)** - Fluxos de segurança, LGPD e boas práticas
+
 ---
 
 ## Arquitetura Atual vs. Futura
