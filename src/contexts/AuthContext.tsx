@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { FACE_ID_AUTH_TOKEN, type FaceIdUser } from '@/types/faceId'
+import { FACE_ID_AUTH_TOKEN } from '@/types/faceId'
 import {
   type AuthSession,
   type AuthUser,
@@ -8,24 +8,7 @@ import {
   getAuthSession,
   saveAuthSession,
 } from '@/services/authService'
-
-export interface LoginCredentials {
-  emailOrUsername: string
-  password: string
-  faceIdUser?: FaceIdUser
-}
-
-export interface AuthContextValue {
-  user: AuthUser | null
-  token: string | null
-  isAuthenticated: boolean
-  isLoading: boolean
-  loginError: string | null
-  login: (credentials: LoginCredentials) => Promise<void>
-  logout: () => void
-}
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+import { AuthContext, type AuthContextValue, type LoginCredentials } from './authContext'
 
 interface AuthProviderProps {
   children: React.ReactNode
@@ -75,7 +58,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     },
   })
 
-  const login = async (credentials: LoginCredentials) => {
+  const login = useCallback(async (credentials: LoginCredentials) => {
     setLoginError(null)
 
     const isFaceIdLogin = credentials.password === FACE_ID_AUTH_TOKEN || Boolean(credentials.faceIdUser)
@@ -106,14 +89,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     await loginMutation.mutateAsync(credentials)
-  }
+  }, [loginMutation])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     clearAuthSession()
     setUser(null)
     setToken(null)
     setLoginError(null)
-  }
+  }, [])
 
   const value: AuthContextValue = useMemo(() => {
     return {
@@ -125,15 +108,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       login,
       logout,
     }
-  }, [user, token, isInitializing, loginMutation.isPending, loginError])
+  }, [user, token, isInitializing, loginMutation.isPending, loginError, login, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth deve ser usado dentro de um AuthProvider')
-  }
-  return context
 }

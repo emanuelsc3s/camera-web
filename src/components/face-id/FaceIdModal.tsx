@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertCircle, ShieldCheck, UserPlus, Users } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
 import { useFaceId } from '@/hooks/useFaceId'
+import { useAuth } from '@/hooks/useAuth'
 import { FaceIdRecognitionView } from '@/components/face-id/FaceIdRecognitionView'
 import { FaceIdRegisterForm } from '@/components/face-id/FaceIdRegisterForm'
 import { Button } from '@/components/ui/button'
@@ -42,12 +42,6 @@ export function FaceIdModal({ open, onOpenChange }: FaceIdModalProps) {
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isRequestingCamera, setIsRequestingCamera] = useState(false)
 
-  const requestCameraOnce = useCallback(async () => {
-    if (hasRequestedCameraRef.current) return
-    await requestCameraPermission()
-    hasRequestedCameraRef.current = true
-  }, [])
-
   const requestCameraPermission = useCallback(async () => {
     try {
       if (!navigator?.mediaDevices?.getUserMedia) {
@@ -68,6 +62,12 @@ export function FaceIdModal({ open, onOpenChange }: FaceIdModalProps) {
       setIsRequestingCamera(false)
     }
   }, [])
+
+  const requestCameraOnce = useCallback(async () => {
+    if (hasRequestedCameraRef.current) return
+    await requestCameraPermission()
+    hasRequestedCameraRef.current = true
+  }, [requestCameraPermission])
 
   useEffect(() => {
     if (activeTab !== mode) {

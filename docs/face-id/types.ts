@@ -24,3 +24,13 @@ export interface DetectionBox {
   distance?: number;
   color: string;
 }
+
+export interface MatchedFaceBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+  distance: number;
+  rawLabel: string;
+}

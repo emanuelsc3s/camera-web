@@ -15,7 +15,7 @@ import PhotoCaptureModal from '@/components/inspection/PhotoCaptureModal'
 import GabaritoModal from '@/components/inspection/GabaritoModal'
 import BarcodeReadingModal from '@/components/inspection/BarcodeReadingModal'
 import StatsCard from '@/components/inspection/StatsCard'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth } from '@/hooks/useAuth'
 import {
   ChevronLeft,
   Search,

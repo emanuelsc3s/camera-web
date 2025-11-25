@@ -1,7 +1,13 @@
-import { RegisteredUser, FaceDetectionResult } from '../types';
+import type { RegisteredUser, FaceDetectionResult, MatchedFaceBox } from '../types';
+import type {
+  FaceApi,
+  FaceDetectionWithDescriptor,
+  FaceMatcher,
+  FaceMatcherResult,
+} from '../../../src/types/faceApi';
 
-// face-api.js is loaded via script tag in index.html
-declare const faceapi: any;
+// face-api.js é carregado via script no index.html
+declare const faceapi: FaceApi;
 
 // Use a reliable CDN for the models to ensure the app works without local file setup
 const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
@@ -42,7 +48,7 @@ export const detectFace = async (imageElement: HTMLImageElement | HTMLVideoEleme
   };
 };
 
-export const createFaceMatcher = (users: RegisteredUser[]): any => {
+export const createFaceMatcher = (users: RegisteredUser[]): FaceMatcher | null => {
   if (users.length === 0) return null;
 
   const labeledDescriptors = users.map((user) => {
@@ -56,16 +62,19 @@ export const createFaceMatcher = (users: RegisteredUser[]): any => {
 
 export const matchFace = async (
   videoElement: HTMLVideoElement,
-  faceMatcher: any
-) => {
+  faceMatcher: FaceMatcher
+): Promise<MatchedFaceBox[]> => {
   const detections = await faceapi.detectAllFaces(videoElement)
     .withFaceLandmarks()
     .withFaceDescriptors();
 
-  const results = detections.map((d: any) => faceMatcher.findBestMatch(d.descriptor));
+  const results = detections.map((detection) =>
+    faceMatcher.findBestMatch(detection.descriptor)
+  );
   
-  return results.map((result: any, i: number) => {
-    const box = detections[i].detection.box;
+  return results.map((result: FaceMatcherResult, i: number) => {
+    const detection: FaceDetectionWithDescriptor = detections[i];
+    const box = detection.detection.box;
     return {
       x: box.x,
       y: box.y,

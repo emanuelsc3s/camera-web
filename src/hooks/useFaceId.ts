@@ -21,6 +21,7 @@ import {
   type FaceIdUser,
   type RecognitionStatus,
 } from '@/types/faceId'
+import type { FaceMatcher } from '@/types/faceApi'
 
 export const useFaceId = () => {
   const [isInitialized, setIsInitialized] = useState(false)
@@ -33,7 +34,8 @@ export const useFaceId = () => {
   const [error, setError] = useState<string | null>(null)
 
   const lastProcessedTime = useRef<number>(0)
-  const faceMatcher = useRef<any>(null)
+  const isProcessingFrame = useRef(false)
+  const faceMatcher = useRef<FaceMatcher | null>(null)
 
   useEffect(() => {
     const init = async () => {
@@ -81,19 +83,26 @@ export const useFaceId = () => {
 
   const processRecognitionFrame = useCallback(
     async (video: HTMLVideoElement) => {
+      if (status === 'recognized') return
+
+      if (isProcessingFrame.current) return
+
       const now = Date.now()
       if (now - lastProcessedTime.current < FACE_ID_DEFAULTS.throttleMs) return
-      lastProcessedTime.current = now
 
-      if (!faceMatcher.current || users.length === 0) {
+      const matcher = faceMatcher.current
+      if (!matcher || users.length === 0) {
         setDetectedBoxes([])
         setStatus('idle')
         return
       }
 
+      isProcessingFrame.current = true
+      lastProcessedTime.current = now
+
       try {
         setStatus('detecting')
-        const matches = await matchFaces(video, faceMatcher.current, users)
+        const matches = await matchFaces(video, matcher, users)
 
         const boxes: DetectionBox[] = matches.map((match) => ({
           x: match.x,
@@ -122,9 +131,11 @@ export const useFaceId = () => {
         console.error('[FaceID] Erro no processamento:', err)
         setStatus('error')
         setError('Erro ao processar reconhecimento')
+      } finally {
+        isProcessingFrame.current = false
       }
     },
-    [users]
+    [status, users]
   )
 
   const registerUser = useCallback(

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { loadModels, detectFace, createFaceMatcher, matchFace } from './services/faceService';
 import { initDB, saveUserToDB, getAllUsersFromDB, deleteUserFromDB } from './services/storageService';
 import { WebcamView } from './components/WebcamView';
-import { RegisteredUser, DetectionBox } from './types';
+import type { RegisteredUser, DetectionBox, MatchedFaceBox } from './types';
 import { Plus, ScanFace, Users, Trash2, ShieldCheck, Database } from 'lucide-react';
 
 // Safe ID generation for environments where crypto.randomUUID might not be available (e.g. non-secure http)
@@ -125,19 +125,19 @@ export default function App() {
       const matches = await matchFace(video, matcher);
       
       // Map matches to our DetectionBox type
-      const boxes: DetectionBox[] = matches.map((m: any) => ({
-        x: m.x,
-        y: m.y,
-        width: m.width,
-        height: m.height,
-        label: m.label,
-        distance: m.distance,
-        color: m.rawLabel === 'unknown' ? '#ef4444' : '#10b981'
+      const boxes: DetectionBox[] = matches.map((match: MatchedFaceBox) => ({
+        x: match.x,
+        y: match.y,
+        width: match.width,
+        height: match.height,
+        label: match.label,
+        distance: match.distance,
+        color: match.rawLabel === 'unknown' ? '#ef4444' : '#10b981'
       }));
       
       setDetectedBoxes(boxes);
 
-    } catch (err) {
+    } catch {
       // Silent fail on frame error
     }
   };

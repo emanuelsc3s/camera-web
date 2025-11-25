@@ -1,17 +1,20 @@
 /// <reference types="vite/client" />
-
-interface ImportMetaEnv {
-  readonly VITE_APP_TITLE: string
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv
-}
+import type { FaceApi, TensorFlowNamespace } from '@/types/faceApi'
 
 declare global {
-  // face-api.js is loaded via CDN in index.html
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const faceapi: any
+  interface ImportMetaEnv {
+    readonly VITE_APP_TITLE: string
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv
+  }
+
+  interface Window {
+    tf?: TensorFlowNamespace
+  }
+
+  const faceapi: FaceApi
 }
 
 export {}

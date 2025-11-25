@@ -5,29 +5,45 @@ import {
   type FaceIdUser,
   type FaceMatch,
 } from '@/types/faceId'
+import type {
+  FaceDetectionWithDescriptor,
+  FaceMatcher,
+  FaceMatcherResult,
+  TensorFlowEngine,
+} from '@/types/faceApi'
 
 export const detectSingleFace = async (
   imageElement: HTMLImageElement | HTMLVideoElement
 ): Promise<FaceDetectionResult | null> => {
   await ensureFaceApiModelsLoaded()
 
-  const detection = await faceapi
-    .detectSingleFace(imageElement)
-    .withFaceLandmarks()
-    .withFaceDescriptor()
+  const tfEngine: TensorFlowEngine | undefined = faceapi.tf?.engine?.() ?? window.tf?.engine?.()
+  tfEngine?.startScope()
 
-  if (!detection) return null
+  try {
+    const detection = await faceapi
+      .detectSingleFace(imageElement)
+      .withFaceLandmarks()
+      .withFaceDescriptor()
 
-  const { box } = detection.detection
-  if (detection.detection.score < FACE_ID_DEFAULTS.minDetectionScore) return null
+    if (!detection) return null
 
-  return {
-    x: box.x,
-    y: box.y,
-    width: box.width,
-    height: box.height,
-    score: detection.detection.score,
-    descriptor: detection.descriptor,
+    const { box } = detection.detection
+    if (detection.detection.score < FACE_ID_DEFAULTS.minDetectionScore) return null
+
+    // Copiar descriptor antes de encerrar o escopo do TensorFlow
+    const descriptorCopy = new Float32Array(detection.descriptor)
+
+    return {
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+      score: detection.detection.score,
+      descriptor: descriptorCopy,
+    }
+  } finally {
+    tfEngine?.endScope()
   }
 }
 
@@ -36,28 +52,35 @@ export const detectAllFaces = async (
 ): Promise<FaceDetectionResult[]> => {
   await ensureFaceApiModelsLoaded()
 
-  const detections = await faceapi
-    .detectAllFaces(videoElement)
-    .withFaceLandmarks()
-    .withFaceDescriptors()
+  const tfEngine: TensorFlowEngine | undefined = faceapi.tf?.engine?.() ?? window.tf?.engine?.()
+  tfEngine?.startScope()
 
-  return detections.map((detection: any) => {
-    const { box } = detection.detection
-    return {
-      x: box.x,
-      y: box.y,
-      width: box.width,
-      height: box.height,
-      score: detection.detection.score,
-      descriptor: detection.descriptor,
-    }
-  })
+  try {
+    const detections = await faceapi
+      .detectAllFaces(videoElement)
+      .withFaceLandmarks()
+      .withFaceDescriptors()
+
+    return detections.map((detection): FaceDetectionResult => {
+      const { box } = detection.detection
+      return {
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height,
+        score: detection.detection.score,
+        descriptor: detection.descriptor,
+      }
+    })
+  } finally {
+    tfEngine?.endScope()
+  }
 }
 
 export const createFaceMatcher = (
   users: FaceIdUser[],
   threshold: number = FACE_ID_DEFAULTS.matchThreshold
-): any => {
+): FaceMatcher | null => {
   if (users.length === 0) return null
 
   const labeledDescriptors = users.map((user) => {
@@ -70,31 +93,40 @@ export const createFaceMatcher = (
 
 export const matchFaces = async (
   videoElement: HTMLVideoElement,
-  faceMatcher: any,
+  faceMatcher: FaceMatcher,
   users: FaceIdUser[]
 ): Promise<FaceMatch[]> => {
-  const detections = await faceapi
-    .detectAllFaces(videoElement)
-    .withFaceLandmarks()
-    .withFaceDescriptors()
+  const tfEngine: TensorFlowEngine | undefined = faceapi.tf?.engine?.() ?? window.tf?.engine?.()
+  tfEngine?.startScope()
 
-  const results = detections.map((d: any) => faceMatcher.findBestMatch(d.descriptor))
+  try {
+    const detections = await faceapi
+      .detectAllFaces(videoElement)
+      .withFaceLandmarks()
+      .withFaceDescriptors()
 
-  return results.map((result: any, index: number) => {
-    const detection = detections[index]
-    const box = detection.detection.box
-    const matchedUser = users.find((user) => user.id === result.label)
+    const results = detections.map((detection) =>
+      faceMatcher.findBestMatch(detection.descriptor)
+    )
 
-    return {
-      x: box.x,
-      y: box.y,
-      width: box.width,
-      height: box.height,
-      label: matchedUser ? matchedUser.name : 'unknown',
-      distance: result.distance,
-      userId: matchedUser?.id,
-    }
-  })
+    return results.map((result: FaceMatcherResult, index: number) => {
+      const detection: FaceDetectionWithDescriptor = detections[index]
+      const box = detection.detection.box
+      const matchedUser = users.find((user) => user.id === result.label)
+
+      return {
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height,
+        label: matchedUser ? matchedUser.name : 'unknown',
+        distance: result.distance,
+        userId: matchedUser?.id,
+      }
+    })
+  } finally {
+    tfEngine?.endScope()
+  }
 }
 
 export const generateUserId = (): string => {
