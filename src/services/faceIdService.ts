@@ -6,16 +6,40 @@ import {
   type FaceMatch,
 } from '@/types/faceId'
 import type {
+  FaceDetectionBox,
   FaceDetectionWithDescriptor,
   FaceMatcher,
   FaceMatcherResult,
   TensorFlowEngine,
 } from '@/types/faceApi'
 
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value)
+
+const hasValidBox = (box: { x: unknown; y: unknown; width: unknown; height: unknown }): box is FaceDetectionBox =>
+  isFiniteNumber(box.x) &&
+  isFiniteNumber(box.y) &&
+  isFiniteNumber(box.width) &&
+  isFiniteNumber(box.height)
+
+const hasValidVideoDimensions = (video: HTMLVideoElement): boolean =>
+  isFiniteNumber(video.videoWidth) &&
+  isFiniteNumber(video.videoHeight) &&
+  video.videoWidth > 0 &&
+  video.videoHeight > 0
+
 export const detectSingleFace = async (
   imageElement: HTMLImageElement | HTMLVideoElement
 ): Promise<FaceDetectionResult | null> => {
   await ensureFaceApiModelsLoaded()
+
+  if (
+    imageElement instanceof HTMLVideoElement &&
+    !hasValidVideoDimensions(imageElement)
+  ) {
+    console.warn('[FaceID] Frame ignorado por não possuir dimensões válidas')
+    return null
+  }
 
   const tfEngine: TensorFlowEngine | undefined = faceapi.tf?.engine?.() ?? window.tf?.engine?.()
   tfEngine?.startScope()
@@ -29,6 +53,11 @@ export const detectSingleFace = async (
     if (!detection) return null
 
     const { box } = detection.detection
+    if (!hasValidBox(box)) {
+      console.warn('[FaceID] Box inválido recebido ao detectar rosto único', box)
+      return null
+    }
+
     if (detection.detection.score < FACE_ID_DEFAULTS.minDetectionScore) return null
 
     // Copiar descriptor antes de encerrar o escopo do TensorFlow
@@ -52,6 +81,11 @@ export const detectAllFaces = async (
 ): Promise<FaceDetectionResult[]> => {
   await ensureFaceApiModelsLoaded()
 
+  if (!hasValidVideoDimensions(videoElement)) {
+    console.warn('[FaceID] Ignorando detecção: vídeo sem dimensões válidas')
+    return []
+  }
+
   const tfEngine: TensorFlowEngine | undefined = faceapi.tf?.engine?.() ?? window.tf?.engine?.()
   tfEngine?.startScope()
 
@@ -61,7 +95,16 @@ export const detectAllFaces = async (
       .withFaceLandmarks()
       .withFaceDescriptors()
 
-    return detections.map((detection): FaceDetectionResult => {
+    const validDetections = detections.filter((detection) => {
+      const { box } = detection.detection
+      const isValid = hasValidBox(box)
+      if (!isValid) {
+        console.warn('[FaceID] Box inválido descartado durante detecção múltipla', box)
+      }
+      return isValid
+    })
+
+    return validDetections.map((detection): FaceDetectionResult => {
       const { box } = detection.detection
       return {
         x: box.x,
@@ -96,6 +139,11 @@ export const matchFaces = async (
   faceMatcher: FaceMatcher,
   users: FaceIdUser[]
 ): Promise<FaceMatch[]> => {
+  if (!hasValidVideoDimensions(videoElement)) {
+    console.warn('[FaceID] Ignorando frame para matching: vídeo sem dimensões válidas')
+    return []
+  }
+
   const tfEngine: TensorFlowEngine | undefined = faceapi.tf?.engine?.() ?? window.tf?.engine?.()
   tfEngine?.startScope()
 
@@ -105,12 +153,23 @@ export const matchFaces = async (
       .withFaceLandmarks()
       .withFaceDescriptors()
 
-    const results = detections.map((detection) =>
+    const validDetections = detections.filter((detection) => {
+      const { box } = detection.detection
+      const isValid = hasValidBox(box)
+      if (!isValid) {
+        console.warn('[FaceID] Box inválido descartado antes do FaceMatcher', box)
+      }
+      return isValid
+    })
+
+    if (validDetections.length === 0) return []
+
+    const results = validDetections.map((detection) =>
       faceMatcher.findBestMatch(detection.descriptor)
     )
 
     return results.map((result: FaceMatcherResult, index: number) => {
-      const detection: FaceDetectionWithDescriptor = detections[index]
+      const detection: FaceDetectionWithDescriptor = validDetections[index]
       const box = detection.detection.box
       const matchedUser = users.find((user) => user.id === result.label)
 

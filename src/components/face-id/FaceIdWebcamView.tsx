@@ -79,8 +79,15 @@ export function FaceIdWebcamView({
       const video = webcamRef.current?.video as HTMLVideoElement | null
       const canvas = canvasRef.current
       if (video && video.readyState === 4 && canvas) {
+        if (!video.videoWidth || !video.videoHeight) {
+          animationFrame = requestAnimationFrame(loop)
+          return
+        }
+
         if (mode === 'recognize' && onFrameProcess) {
-          onFrameProcess(video)
+          Promise.resolve(onFrameProcess(video)).catch((error) => {
+            console.error('[FaceID] Erro ao processar frame da câmera', error)
+          })
         }
 
         const { videoWidth, videoHeight } = video
@@ -92,7 +99,15 @@ export function FaceIdWebcamView({
         const ctx = canvas.getContext('2d')
         if (ctx) {
           ctx.clearRect(0, 0, canvas.width, canvas.height)
-          boxes.forEach((box) => {
+          const validBoxes = boxes.filter(
+            (box) =>
+              Number.isFinite(box.x) &&
+              Number.isFinite(box.y) &&
+              Number.isFinite(box.width) &&
+              Number.isFinite(box.height)
+          )
+
+          validBoxes.forEach((box) => {
             ctx.strokeStyle = box.color
             ctx.lineWidth = 3
             ctx.strokeRect(box.x, box.y, box.width, box.height)
