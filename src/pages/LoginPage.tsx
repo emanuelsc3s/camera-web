@@ -217,12 +217,12 @@ export default function LoginPage() {
                     type="button"
                     variant="outline"
                     size="lg"
-                    className="flex-1 h-12 text-base font-semibold border-2 hover:bg-secondary transition-all"
+                    className="flex-1 h-12 text-base font-semibold border-2 border-primary/30 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 hover:from-primary/10 hover:via-primary/20 hover:to-primary/10 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300 group text-primary hover:text-primary"
                     onClick={() => setFaceIdModalOpen(true)}
                     disabled={isLoading}
                   >
-                    <ScanFace className="mr-2 h-5 w-5" aria-hidden="true" />
-                    <span>Face ID</span>
+                    <ScanFace className="mr-2 h-5 w-5 text-primary group-hover:scale-110 transition-transform duration-300" aria-hidden="true" />
+                    <span className="text-primary">Face ID</span>
                   </Button>
                 </div>
               </form>
