@@ -31,15 +31,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const loginMutation = useMutation<{ token: string; user: AuthUser }, Error, LoginCredentials>({
     mutationKey: ['auth', 'login'],
-    mutationFn: async ({ emailOrUsername }: LoginCredentials) => {
+    mutationFn: async ({ username }: LoginCredentials) => {
       await new Promise((resolve) => setTimeout(resolve, 500))
 
-      const token = btoa(`${emailOrUsername}:${Date.now()}`)
+      const token = btoa(`${username}:${Date.now()}`)
 
       const user: AuthUser = {
-        id: emailOrUsername.toLowerCase(),
-        name: emailOrUsername,
-        email: emailOrUsername,
+        id: username.toLowerCase(),
+        name: username,
+        username: username,
       }
 
       const session: AuthSession = { token, user }
@@ -68,13 +68,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         ? {
             id: faceUser.id,
             name: faceUser.name,
-            email: faceUser.matricula || faceUser.name,
+            username: faceUser.matricula || faceUser.name,
             photoUrl: faceUser.photoUrl,
           }
         : {
-            id: credentials.emailOrUsername,
-            name: credentials.emailOrUsername,
-            email: credentials.emailOrUsername,
+            id: credentials.username,
+            name: credentials.username,
+            username: credentials.username,
           }
 
       const session: AuthSession = {

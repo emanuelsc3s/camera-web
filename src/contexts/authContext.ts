@@ -3,7 +3,7 @@ import type { AuthUser } from '@/services/authService'
 import type { FaceIdUser } from '@/types/faceId'
 
 export interface LoginCredentials {
-  emailOrUsername: string
+  username: string
   password: string
   faceIdUser?: FaceIdUser
 }

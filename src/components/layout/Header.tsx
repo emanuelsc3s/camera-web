@@ -95,7 +95,7 @@ export default function Header() {
 
             <div className="text-center space-y-1">
               <p className="text-lg font-semibold leading-tight break-words">{displayName}</p>
-              <p className="text-sm text-muted-foreground break-words">{user?.email || 'Sem e-mail'}</p>
+              <p className="text-sm text-muted-foreground break-words">{user?.username || 'Sem usuário'}</p>
               <p className="text-[11px] text-muted-foreground/80 break-words">
                 ID: {user?.id || 'N/D'}
               </p>

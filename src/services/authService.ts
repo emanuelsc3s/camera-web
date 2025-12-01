@@ -18,8 +18,8 @@ export interface AuthUser {
   id: string
   /** Nome do usuário para exibição na interface */
   name: string
-  /** E-mail do usuário autenticado */
-  email: string
+  /** Nome de usuário para login */
+  username: string
   /** URL da foto do usuário, quando disponível */
   photoUrl?: string
 }

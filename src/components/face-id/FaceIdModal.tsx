@@ -98,7 +98,7 @@ export function FaceIdModal({ open, onOpenChange }: FaceIdModalProps) {
       loggingRef.current = true
       try {
         await login({
-          emailOrUsername: recognizedUser.matricula || recognizedUser.name,
+          username: recognizedUser.matricula || recognizedUser.name,
           password: FACE_ID_AUTH_TOKEN,
           faceIdUser: recognizedUser,
         })
