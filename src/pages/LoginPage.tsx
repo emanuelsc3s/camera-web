@@ -153,13 +153,7 @@ export default function LoginPage() {
           </form>
         </CardContent>
 
-        <CardFooter>
-          <p className="text-xs text-muted-foreground text-center w-full">
-            As credenciais são validadas apenas no navegador nesta fase do
-            projeto. Quando a API oficial estiver disponível, este fluxo
-            passará a usar autenticação real no backend.
-          </p>
-        </CardFooter>
+
       </Card>
 
       <FaceIdModal
