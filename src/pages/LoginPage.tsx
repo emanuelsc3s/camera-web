@@ -112,10 +112,10 @@ export default function LoginPage() {
 
       {/* Seção de Login */}
       <section
-        className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12 bg-background"
+        className="flex-1 flex justify-center items-start p-6 sm:p-8 lg:p-12 bg-background"
         aria-label="Formulário de login"
       >
-        <div className="w-full max-w-md space-y-8">
+        <div className="w-full max-w-md h-full flex flex-col">
           {/* Logo/Branding para mobile - visível apenas em telas menores */}
           <div className="lg:hidden text-center space-y-2">
             <div className="flex items-center justify-center gap-2 text-primary">
@@ -125,6 +125,15 @@ export default function LoginPage() {
             <p className="text-sm text-muted-foreground">
               Sistema de Inspeção e Controle Farmacêutico
             </p>
+          </div>
+
+          {/* Logomarca - ocupa espaço flexível e centraliza a imagem */}
+          <div className="flex-1 flex items-center justify-center min-h-[120px]">
+            <img
+              src="/logo-farmace.png"
+              alt="Logo Farmace"
+              className="h-20 w-auto object-contain"
+            />
           </div>
 
           {/* Card de Login */}
@@ -228,11 +237,6 @@ export default function LoginPage() {
               </form>
             </CardContent>
           </Card>
-
-          {/* Rodapé com informações adicionais */}
-          <p className="text-center text-sm text-muted-foreground">
-            Acesso restrito a usuários autorizados.
-          </p>
         </div>
       </section>
 
