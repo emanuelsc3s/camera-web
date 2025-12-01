@@ -101,10 +101,10 @@ export default function LoginPage() {
               <span className="text-2xl font-bold tracking-tight">SysView</span>
             </div>
             <h1 className="text-3xl xl:text-4xl font-bold leading-tight">
-              Sistema de Inspeção e Controle Farmacêutico
+              Sistema de Inspeção e Controle de Produção Online
             </h1>
             <p className="text-lg text-white/90 leading-relaxed">
-              Monitoramento em tempo real da linha de produção com tecnologia de visão computacional.
+              Monitoramento em tempo real da linha de produção com tecnologia de <span className="font-bold">Visão Computacional.</span>
             </p>
           </div>
         </div>
