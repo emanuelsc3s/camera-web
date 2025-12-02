@@ -103,8 +103,8 @@ export default function LoginPage() {
             <h1 className="text-3xl xl:text-4xl font-bold leading-tight">
               Sistema de Inspeção e Controle de Produção Online
             </h1>
-            <p className="text-lg text-white/90 leading-relaxed">
-              Monitoramento em tempo real da linha de produção com tecnologia de <span className="font-bold">Visão Computacional.</span>
+            <p className="text-lg text-white/90 leading-relaxed"> 
+              Monitoramento em tempo real da linha de produção com tecnologia de <span>Visão Computacional.</span>
             </p>
           </div>
         </div>
