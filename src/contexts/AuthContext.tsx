@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { FACE_ID_AUTH_TOKEN } from '@/types/faceId'
+import { FACE_ID_AUTH_TOKEN, type FaceIdUser } from '@/types/faceId'
 import {
   type AuthSession,
   type AuthUser,
@@ -8,7 +8,28 @@ import {
   getAuthSession,
   saveAuthSession,
 } from '@/services/authService'
-import { AuthContext, type AuthContextValue, type LoginCredentials } from './authContext'
+
+// ============================================================================
+// Tipos e Context (consolidado de authContext.ts)
+// ============================================================================
+
+export interface LoginCredentials {
+  username: string
+  password: string
+  faceIdUser?: FaceIdUser
+}
+
+export interface AuthContextValue {
+  user: AuthUser | null
+  token: string | null
+  isAuthenticated: boolean
+  isLoading: boolean
+  loginError: string | null
+  login: (credentials: LoginCredentials) => Promise<void>
+  logout: () => void
+}
+
+export const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 interface AuthProviderProps {
   children: React.ReactNode
