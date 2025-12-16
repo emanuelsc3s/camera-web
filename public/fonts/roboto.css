@@ -1,8 +1,13 @@
 /**
  * Roboto Font - Versão Local (Offline)
- * 
+ *
  * Fonte sans-serif padrão do Google para uso offline.
  * Similar às fontes do sistema (ui-sans-serif, system-ui).
+ *
+ * Formato: WOFF2 (Web Open Font Format 2)
+ * - Melhor compressão que TTF/WOFF
+ * - Suporte universal em navegadores modernos
+ * - Otimizado para web
  */
 
 /* Roboto Light - Peso 300 */
@@ -11,7 +16,7 @@
   font-style: normal;
   font-weight: 300;
   font-display: swap;
-  src: url('/fonts/Roboto-Light.ttf') format('truetype');
+  src: url('/fonts/Roboto-Light.woff2') format('woff2');
 }
 
 /* Roboto Regular - Peso 400 (padrão) */
@@ -20,7 +25,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/fonts/Roboto-Regular.ttf') format('truetype');
+  src: url('/fonts/Roboto-Regular.woff2') format('woff2');
 }
 
 /* Roboto Medium - Peso 500 */
@@ -29,7 +34,7 @@
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('/fonts/Roboto-Medium.ttf') format('truetype');
+  src: url('/fonts/Roboto-Medium.woff2') format('woff2');
 }
 
 /* Roboto Bold - Peso 700 */
@@ -38,6 +43,6 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('/fonts/Roboto-Bold.ttf') format('truetype');
+  src: url('/fonts/Roboto-Bold.woff2') format('woff2');
 }
 
