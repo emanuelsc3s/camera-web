@@ -160,7 +160,7 @@ export function FaceIdWebcamView({
   }, [onRetry])
 
   return (
-    <div className="relative w-full overflow-hidden rounded-lg border bg-black shadow-sm">
+    <div className="relative w-full flex-1 min-h-[200px] overflow-hidden rounded-lg border bg-black shadow-sm">
       {!cameraReady && (
         <div className="absolute inset-0 z-10 flex items-center justify-center text-sm text-muted-foreground">
           Iniciando câmera...
@@ -173,7 +173,7 @@ export function FaceIdWebcamView({
         audio={false}
         mirrored
         screenshotFormat="image/jpeg"
-        className="aspect-video h-full w-full object-cover"
+        className="h-full w-full object-cover"
         videoConstraints={CONSTRAINTS_CHAIN[constraintsIndex]}
         onUserMedia={() => {
           setCameraError(null)
@@ -191,7 +191,7 @@ export function FaceIdWebcamView({
       />
 
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="h-48 w-48 rounded-full border border-white/20 bg-white/5 shadow-[0_0_0_2000px_rgba(0,0,0,0.15)] backdrop-blur-sm" />
+        <div className="h-40 w-40 rounded-full border border-white/20 bg-white/5 shadow-[0_0_0_2000px_rgba(0,0,0,0.15)] backdrop-blur-sm" />
       </div>
 
       {mode === 'register' && (
@@ -200,7 +200,7 @@ export function FaceIdWebcamView({
             type="button"
             onClick={capture}
             disabled={isProcessing || !cameraReady}
-            className="pointer-events-auto inline-flex items-center rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+            className="pointer-events-auto inline-flex items-center rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
           >
             {isProcessing ? 'Processando...' : 'Capturar rosto'}
           </button>

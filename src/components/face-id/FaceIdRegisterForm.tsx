@@ -64,11 +64,11 @@ export function FaceIdRegisterForm({ onRegister }: FaceIdRegisterFormProps) {
   )
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3">
-        <div className="grid gap-1.5">
-          <Label htmlFor="name" className="flex items-center gap-2">
-            <UserPlus className="h-4 w-4" aria-hidden="true" />
+    <div className="flex-1 flex flex-col gap-2 min-h-0">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="grid gap-1">
+          <Label htmlFor="name" className="flex items-center gap-1.5 text-xs">
+            <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
             Nome completo
           </Label>
           <Input
@@ -76,13 +76,14 @@ export function FaceIdRegisterForm({ onRegister }: FaceIdRegisterFormProps) {
             value={name}
             disabled={isProcessing}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Nome a ser reconhecido"
+            placeholder="Nome"
+            className="h-8 text-sm"
           />
         </div>
 
-        <div className="grid gap-1.5">
-          <Label htmlFor="matricula" className="flex items-center gap-2">
-            <Camera className="h-4 w-4" aria-hidden="true" />
+        <div className="grid gap-1">
+          <Label htmlFor="matricula" className="flex items-center gap-1.5 text-xs">
+            <Camera className="h-3.5 w-3.5" aria-hidden="true" />
             Matrícula (opcional)
           </Label>
           <Input
@@ -90,7 +91,8 @@ export function FaceIdRegisterForm({ onRegister }: FaceIdRegisterFormProps) {
             value={matricula}
             disabled={isProcessing}
             onChange={(event) => setMatricula(event.target.value)}
-            placeholder="Código interno ou identificação"
+            placeholder="Código"
+            className="h-8 text-sm"
           />
         </div>
       </div>
@@ -102,31 +104,27 @@ export function FaceIdRegisterForm({ onRegister }: FaceIdRegisterFormProps) {
       />
 
       {preview && (
-        <div className="rounded-md border bg-muted/40 p-3 text-sm">
-          <p className="text-xs text-muted-foreground">Última captura</p>
+        <div className="flex items-center gap-2 rounded border bg-muted/40 px-2 py-1.5">
           <img
             src={preview}
             alt="Pré-visualização do rosto capturado"
-            className="mt-2 h-32 w-full rounded-md object-cover"
+            className="h-12 w-12 rounded object-cover"
           />
+          <div className="flex-1">
+            <p className="text-xs text-muted-foreground">Captura realizada</p>
+          </div>
+          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setPreview(null)}>
+            Limpar
+          </Button>
         </div>
       )}
 
       {error && (
-        <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          <AlertCircle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
+        <div className="flex items-start gap-1.5 rounded border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+          <AlertCircle className="mt-[1px] h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </div>
       )}
-
-      <div className="text-xs text-muted-foreground">
-        Dica: use iluminação frontal e mantenha o rosto centralizado para obter um vetor facial de
-        boa qualidade.
-      </div>
-
-      <Button type="button" variant="outline" onClick={() => setPreview(null)} disabled={!preview}>
-        Limpar pré-visualização
-      </Button>
     </div>
   )
 }
