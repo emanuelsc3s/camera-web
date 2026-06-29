@@ -4,11 +4,17 @@ Este diretório contém as fontes **Roboto** para uso offline no projeto SysView
 
 ## 📦 Arquivos Incluídos
 
-### Fontes TTF (TrueType)
-- `Roboto-Light.ttf` (300) - Peso leve
-- `Roboto-Regular.ttf` (400) - Peso normal/padrão
-- `Roboto-Medium.ttf` (500) - Peso médio
-- `Roboto-Bold.ttf` (700) - Peso negrito
+### Fontes WOFF2 (Web Open Font Format 2)
+- `Roboto-Light.woff2` (300) - Peso leve
+- `Roboto-Regular.woff2` (400) - Peso normal/padrão
+- `Roboto-Medium.woff2` (500) - Peso médio
+- `Roboto-Bold.woff2` (700) - Peso negrito
+
+### Por que WOFF2?
+- ✅ **Melhor compressão**: ~30% menor que TTF
+- ✅ **Suporte universal**: Todos os navegadores modernos (Chrome, Firefox, Safari, Edge)
+- ✅ **Otimizado para web**: Carregamento mais rápido
+- ✅ **Formato padrão**: Recomendado pelo W3C
 
 ## 🎨 Sobre a Fonte Roboto
 
@@ -52,19 +58,20 @@ Veja o arquivo `LICENSE.txt` para mais detalhes.
 ## 💾 Tamanho dos Arquivos
 
 ```
-Roboto-Light.ttf     290 KB
-Roboto-Regular.ttf   290 KB
-Roboto-Medium.ttf    290 KB
-Roboto-Bold.ttf      290 KB
+Roboto-Light.woff2     20 KB
+Roboto-Regular.woff2   20 KB
+Roboto-Medium.woff2    21 KB
+Roboto-Bold.woff2      21 KB
 ```
 
-**Total:** ~1.1 MB
+**Total:** ~82 KB (88% menor que TTF!)
 
 ## ⚡ Performance
 
 - **font-display: swap** - Garante que o texto seja exibido imediatamente
-- **Formato TTF** - Compatível com todos os navegadores
+- **Formato WOFF2** - Melhor compressão e performance
 - **Offline First** - Funciona sem conexão com internet
+- **Carregamento rápido** - Arquivos 88% menores que TTF
 
 ## 🌐 Compatibilidade
 
@@ -78,15 +85,16 @@ Roboto-Bold.ttf      290 KB
 
 Para atualizar as fontes:
 
-1. Acesse o [repositório oficial](https://github.com/google/fonts/tree/main/apache/roboto/static)
-2. Baixe os arquivos `.ttf` atualizados
-3. Substitua os arquivos neste diretório
-4. Atualize o `roboto.css` se necessário
+1. Instale o pacote fontsource: `npm view @fontsource/roboto dist.tarball`
+2. Baixe e extraia o arquivo `.tgz`
+3. Copie os arquivos `roboto-latin-{peso}-normal.woff2` de `package/files/`
+4. Renomeie para `Roboto-{Peso}.woff2` (Light, Regular, Medium, Bold)
+5. Substitua os arquivos neste diretório
 
 ## 💡 Alternativas
 
-Se preferir usar fontes variáveis (menor tamanho):
-- Baixe `Roboto[wdth,wght].ttf` do repositório oficial
+Se preferir usar fontes variáveis (ainda menor):
+- Use `Roboto[wdth,wght].woff2` do repositório oficial
 - Atualize o `roboto.css` para usar fonte variável
-- Redução de tamanho: ~60% menor
+- Redução adicional de tamanho: ~40% menor
 

@@ -1,6 +1,16 @@
 import { FACE_ID_DEFAULTS } from '@/types/faceId'
 
-const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models'
+/**
+ * URL dos modelos de IA do face-api.js
+ *
+ * IMPORTANTE: Modelos armazenados localmente em /public/models/ para uso OFFLINE
+ *
+ * Modelos incluídos:
+ * - ssd_mobilenetv1: Detecção de rostos (leve e rápido)
+ * - face_landmark_68: Detecção de 68 pontos faciais
+ * - face_recognition: Extração de descritores (128 dimensões)
+ */
+const MODEL_URL = '/models'
 
 let modelsLoaded = false
 

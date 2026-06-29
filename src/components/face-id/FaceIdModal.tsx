@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -123,31 +122,33 @@ export function FaceIdModal({ open, onOpenChange }: FaceIdModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader className="space-y-2">
-          <DialogTitle className="flex items-center gap-2 text-2xl font-semibold">
-            <ShieldCheck className="h-5 w-5 text-primary" aria-hidden="true" />
+      <DialogContent className="max-w-3xl h-[90vh] p-4 gap-3 flex flex-col overflow-hidden">
+        <DialogHeader className="space-y-1">
+          <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
+            <ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" />
             Face ID
+            <span className="text-xs font-normal text-muted-foreground ml-auto">
+              Reconhecimento facial
+            </span>
           </DialogTitle>
-          <DialogDescription>
-            Use reconhecimento facial para entrar rapidamente ou cadastre um novo rosto.
-          </DialogDescription>
         </DialogHeader>
 
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           <Button
             variant={activeTab === 'login' ? 'default' : 'outline'}
-            className="flex-1"
+            size="sm"
+            className="flex-1 h-8 text-sm"
             onClick={() => setActiveTab('login')}
           >
             Login com Face ID
           </Button>
           <Button
             variant={activeTab === 'register' ? 'default' : 'outline'}
-            className="flex-1"
+            size="sm"
+            className="flex-1 h-8 text-sm"
             onClick={() => setActiveTab('register')}
           >
-            <UserPlus className="mr-2 h-4 w-4" aria-hidden="true" />
+            <UserPlus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
             Cadastrar rosto
           </Button>
         </div>
@@ -173,22 +174,23 @@ export function FaceIdModal({ open, onOpenChange }: FaceIdModalProps) {
       <FaceIdRegisterForm onRegister={handleRegister} />
     )}
 
-    <div className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-      <div className="flex items-center gap-2">
-        <Users className="h-4 w-4" aria-hidden="true" />
-        <span>{users.length} cadastro(s) local</span>
+    <div className="flex items-center justify-between rounded border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground">
+      <div className="flex items-center gap-1.5">
+        <Users className="h-3.5 w-3.5" aria-hidden="true" />
+        <span>{users.length} cadastro(s)</span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <Button
           variant="outline"
           size="sm"
+          className="h-6 px-2 text-xs"
           onClick={() => void requestCameraPermission()}
           disabled={isRequestingCamera}
         >
-          {isRequestingCamera ? 'Solicitando câmera...' : 'Liberar câmera'}
+          {isRequestingCamera ? 'Aguarde...' : 'Liberar câmera'}
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => void wipeUsers()}>
-          Limpar dados do Face ID
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => void wipeUsers()}>
+          Limpar dados
         </Button>
       </div>
     </div>
