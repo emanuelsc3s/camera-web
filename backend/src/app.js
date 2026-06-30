@@ -25,6 +25,8 @@ app.get('/', (req, res) => {
     status: 'online',
     endpoints: {
       health: `${env.apiPrefix}/health`,
+      inspecoes: `${env.apiPrefix}/inspecoes`,
+      fotos: `${env.apiPrefix}/fotos`,
       produtos: `${env.apiPrefix}/produtos`,
     },
   });

@@ -44,7 +44,7 @@ const env = {
   host: raw.HOST || '127.0.0.1',
   port: parseInteger('PORT', raw.PORT, 8000, 1),
   apiPrefix: raw.API_PREFIX || '/api',
-  requestBodyLimit: raw.REQUEST_BODY_LIMIT || '1mb',
+  requestBodyLimit: raw.REQUEST_BODY_LIMIT || '8mb',
   cors: {
     origins: parseList(
       raw.CORS_ORIGINS ||
