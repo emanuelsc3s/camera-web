@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import Webcam from 'react-webcam'
 import {
   ensureCameraApiSupport,
   getCameraErrorMessage,
   isCameraApiUnsupportedError,
 } from '@/lib/cameraSupport'
-import { FACE_ID_DEFAULTS, type DetectionBox } from '@/types/faceId'
+import { FACE_ID_DEFAULTS, type DetectionBox, type RecognitionStatus } from '@/types/faceId'
 
 interface FaceIdWebcamViewProps {
   mode: 'register' | 'recognize'
   boxes?: DetectionBox[]
+  status?: RecognitionStatus
+  trackingEnabled?: boolean
   isProcessing?: boolean
   onCapture?: (imageSrc: string) => void
   onFrameProcess?: (video: HTMLVideoElement) => void | Promise<void>
@@ -33,9 +35,55 @@ const CONSTRAINTS_CHAIN: MediaTrackConstraints[] = [
   {},
 ]
 
+interface Size {
+  width: number
+  height: number
+}
+
+interface TrackedBox extends DetectionBox {
+  id: string
+  left: number
+  top: number
+}
+
+const EMPTY_SIZE: Size = { width: 0, height: 0 }
+
+const RECOGNITION_STATUS_COPY: Record<RecognitionStatus, { label: string; dotClassName: string }> = {
+  idle: {
+    label: 'Buscando rosto',
+    dotClassName: 'bg-sky-400 shadow-[0_0_0_3px_rgba(56,189,248,0.22)]',
+  },
+  detecting: {
+    label: 'Analisando face',
+    dotClassName: 'bg-amber-300 shadow-[0_0_0_3px_rgba(252,211,77,0.22)]',
+  },
+  recognized: {
+    label: 'Acesso liberado',
+    dotClassName: 'bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.22)]',
+  },
+  unknown: {
+    label: 'Rosto não cadastrado',
+    dotClassName: 'bg-red-400 shadow-[0_0_0_3px_rgba(248,113,113,0.22)]',
+  },
+  error: {
+    label: 'Falha no reconhecimento',
+    dotClassName: 'bg-red-400 shadow-[0_0_0_3px_rgba(248,113,113,0.22)]',
+  },
+}
+
+const isValidBox = (box: DetectionBox): boolean =>
+  Number.isFinite(box.x) &&
+  Number.isFinite(box.y) &&
+  Number.isFinite(box.width) &&
+  Number.isFinite(box.height) &&
+  box.width > 0 &&
+  box.height > 0
+
 export function FaceIdWebcamView({
   mode,
   boxes = [],
+  status = 'idle',
+  trackingEnabled = true,
   isProcessing = false,
   onCapture,
   onFrameProcess,
@@ -43,25 +91,23 @@ export function FaceIdWebcamView({
   onRetry,
 }: FaceIdWebcamViewProps) {
   const cameraSupport = ensureCameraApiSupport()
+  const containerRef = useRef<HTMLDivElement>(null)
   const webcamRef = useRef<Webcam>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const [cameraReady, setCameraReady] = useState(false)
   const [constraintsIndex, setConstraintsIndex] = useState(0)
   const [webcamKey, setWebcamKey] = useState(0)
+  const [viewportSize, setViewportSize] = useState<Size>(EMPTY_SIZE)
+  const [videoSize, setVideoSize] = useState<Size>(EMPTY_SIZE)
   const [cameraError, setCameraError] = useState<string | null>(() =>
     cameraSupport.supported ? null : cameraSupport.message ?? null
   )
   const [hasExhaustedFallbacks, setHasExhaustedFallbacks] = useState(!cameraSupport.supported)
   const stopRequestsRef = useRef(!cameraSupport.supported)
-  const boxesRef = useRef(boxes)
   const modeRef = useRef(mode)
   const onFrameProcessRef = useRef(onFrameProcess)
   const lastFrameProcessTimeRef = useRef(0)
   const isFrameProcessPendingRef = useRef(false)
-
-  useEffect(() => {
-    boxesRef.current = boxes
-  }, [boxes])
+  const videoSizeRef = useRef(EMPTY_SIZE)
 
   useEffect(() => {
     modeRef.current = mode
@@ -82,6 +128,41 @@ export function FaceIdWebcamView({
     if (onCameraError) onCameraError(message)
   }, [cameraSupport.message, cameraSupport.supported, onCameraError])
 
+  const updateViewportSize = useCallback(() => {
+    const element = containerRef.current
+    if (!element) return
+
+    setViewportSize((currentSize) => {
+      const nextSize = {
+        width: element.clientWidth,
+        height: element.clientHeight,
+      }
+
+      if (currentSize.width === nextSize.width && currentSize.height === nextSize.height) {
+        return currentSize
+      }
+
+      return nextSize
+    })
+  }, [])
+
+  useEffect(() => {
+    updateViewportSize()
+
+    const element = containerRef.current
+    if (!element) return
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateViewportSize)
+      return () => window.removeEventListener('resize', updateViewportSize)
+    }
+
+    const observer = new ResizeObserver(updateViewportSize)
+    observer.observe(element)
+
+    return () => observer.disconnect()
+  }, [updateViewportSize])
+
   const capture = useCallback(() => {
     const imageSrc = webcamRef.current?.getScreenshot()
     if (imageSrc && onCapture) {
@@ -94,11 +175,23 @@ export function FaceIdWebcamView({
 
     const loop = () => {
       const video = webcamRef.current?.video as HTMLVideoElement | null
-      const canvas = canvasRef.current
-      if (video && video.readyState === 4 && canvas) {
+      if (video && video.readyState === 4) {
         if (!video.videoWidth || !video.videoHeight) {
           animationFrame = requestAnimationFrame(loop)
           return
+        }
+
+        const nextVideoSize = {
+          width: video.videoWidth,
+          height: video.videoHeight,
+        }
+
+        if (
+          videoSizeRef.current.width !== nextVideoSize.width ||
+          videoSizeRef.current.height !== nextVideoSize.height
+        ) {
+          videoSizeRef.current = nextVideoSize
+          setVideoSize(nextVideoSize)
         }
 
         const now = Date.now()
@@ -119,39 +212,6 @@ export function FaceIdWebcamView({
             .finally(() => {
               isFrameProcessPendingRef.current = false
             })
-        }
-
-        const { videoWidth, videoHeight } = video
-        if (canvas.width !== videoWidth || canvas.height !== videoHeight) {
-          canvas.width = videoWidth
-          canvas.height = videoHeight
-        }
-
-        const ctx = canvas.getContext('2d')
-        if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height)
-          const validBoxes = boxesRef.current.filter(
-            (box) =>
-              Number.isFinite(box.x) &&
-              Number.isFinite(box.y) &&
-              Number.isFinite(box.width) &&
-              Number.isFinite(box.height)
-          )
-
-          validBoxes.forEach((box) => {
-            ctx.strokeStyle = box.color
-            ctx.lineWidth = 3
-            ctx.strokeRect(box.x, box.y, box.width, box.height)
-
-            const label = box.label
-            ctx.fillStyle = box.color
-            const labelWidth = ctx.measureText(label).width + 10
-            ctx.fillRect(box.x, box.y - 24, labelWidth, 22)
-
-            ctx.fillStyle = '#fff'
-            ctx.font = '700 14px Roboto, ui-sans-serif, system-ui, sans-serif'
-            ctx.fillText(label, box.x + 4, box.y - 8)
-          })
         }
       }
       animationFrame = requestAnimationFrame(loop)
@@ -209,8 +269,60 @@ export function FaceIdWebcamView({
     if (onRetry) onRetry()
   }, [onCameraError, onRetry])
 
+  const trackedBoxes = useMemo<TrackedBox[]>(() => {
+    if (!videoSize.width || !videoSize.height || !viewportSize.width || !viewportSize.height) {
+      return []
+    }
+
+    const scale = Math.max(
+      viewportSize.width / videoSize.width,
+      viewportSize.height / videoSize.height
+    )
+    const renderedWidth = videoSize.width * scale
+    const renderedHeight = videoSize.height * scale
+    const offsetX = (viewportSize.width - renderedWidth) / 2
+    const offsetY = (viewportSize.height - renderedHeight) / 2
+
+    return boxes.filter(isValidBox).flatMap((box, index) => {
+      const mirroredX = videoSize.width - box.x - box.width
+      const left = mirroredX * scale + offsetX
+      const top = box.y * scale + offsetY
+      const width = box.width * scale
+      const height = box.height * scale
+      const right = left + width
+      const bottom = top + height
+
+      if (right < 0 || bottom < 0 || left > viewportSize.width || top > viewportSize.height) {
+        return []
+      }
+
+      return [
+        {
+          ...box,
+          id: `${index}-${box.label}`,
+          left,
+          top,
+          width,
+          height,
+        },
+      ]
+    })
+  }, [boxes, videoSize.height, videoSize.width, viewportSize.height, viewportSize.width])
+
+  const statusCopy = RECOGNITION_STATUS_COPY[status]
+  const shouldShowTrackingStatus =
+    mode === 'recognize' && trackingEnabled && cameraReady && !cameraError
+  const shouldShowGuide =
+    cameraReady &&
+    !cameraError &&
+    trackedBoxes.length === 0 &&
+    (mode === 'register' || trackingEnabled)
+
   return (
-    <div className="relative w-full flex-1 min-h-[200px] overflow-hidden rounded-lg border bg-black shadow-sm">
+    <div
+      ref={containerRef}
+      className="relative w-full flex-1 min-h-[200px] overflow-hidden rounded-lg border bg-black shadow-sm"
+    >
       {!cameraReady && (
         <div className="absolute inset-0 z-10 flex items-center justify-center text-sm text-muted-foreground">
           Iniciando câmera...
@@ -237,13 +349,69 @@ export function FaceIdWebcamView({
         />
       )}
 
-      <canvas
-        ref={canvasRef}
-        className="pointer-events-none absolute inset-0 h-full w-full"
-      />
+      <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
+        {shouldShowTrackingStatus && (
+          <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-[11px] font-medium text-white shadow-sm backdrop-blur-sm">
+            <span className={`h-2 w-2 rounded-full ${statusCopy.dotClassName}`} />
+            <span>{statusCopy.label}</span>
+          </div>
+        )}
 
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="h-40 w-40 rounded-full border border-white/20 bg-white/5 shadow-[0_0_0_2000px_rgba(0,0,0,0.15)] backdrop-blur-sm" />
+        {shouldShowGuide && (
+          <div className="absolute inset-x-[22%] bottom-[17%] top-[17%] rounded-[28px] border border-white/20">
+            <div className="absolute -top-px left-10 right-10 h-px bg-white/40 shadow-[0_0_18px_rgba(255,255,255,0.45)] face-id-scan-line" />
+            <span className="absolute left-0 top-0 h-10 w-10 rounded-tl-[28px] border-l-2 border-t-2 border-white/60" />
+            <span className="absolute right-0 top-0 h-10 w-10 rounded-tr-[28px] border-r-2 border-t-2 border-white/60" />
+            <span className="absolute bottom-0 left-0 h-10 w-10 rounded-bl-[28px] border-b-2 border-l-2 border-white/60" />
+            <span className="absolute bottom-0 right-0 h-10 w-10 rounded-br-[28px] border-b-2 border-r-2 border-white/60" />
+          </div>
+        )}
+
+        {trackedBoxes.map((box) => {
+          const trackStyle: CSSProperties = {
+            left: box.left,
+            top: box.top,
+            width: box.width,
+            height: box.height,
+            color: box.color,
+          }
+          const cornerStyle: CSSProperties = { borderColor: box.color }
+          const labelClassName =
+            box.top > 36
+              ? 'absolute -top-8 left-0 max-w-full truncate rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-medium text-white shadow-sm backdrop-blur-sm'
+              : 'absolute left-2 top-2 max-w-[calc(100%-1rem)] truncate rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-medium text-white shadow-sm backdrop-blur-sm'
+
+          return (
+            <div
+              key={box.id}
+              className="absolute min-h-12 min-w-12 rounded-[18px] transition-[left,top,width,height] duration-150 ease-out"
+              style={trackStyle}
+            >
+              <span
+                className="absolute left-0 top-0 h-7 w-7 rounded-tl-[18px] border-l-[3px] border-t-[3px]"
+                style={cornerStyle}
+              />
+              <span
+                className="absolute right-0 top-0 h-7 w-7 rounded-tr-[18px] border-r-[3px] border-t-[3px]"
+                style={cornerStyle}
+              />
+              <span
+                className="absolute bottom-0 left-0 h-7 w-7 rounded-bl-[18px] border-b-[3px] border-l-[3px]"
+                style={cornerStyle}
+              />
+              <span
+                className="absolute bottom-0 right-0 h-7 w-7 rounded-br-[18px] border-b-[3px] border-r-[3px]"
+                style={cornerStyle}
+              />
+              <div
+                className={labelClassName}
+                style={{ boxShadow: `0 0 0 1px ${box.color}66` }}
+              >
+                {box.label}
+              </div>
+            </div>
+          )
+        })}
       </div>
 
       {mode === 'register' && (
@@ -264,7 +432,7 @@ export function FaceIdWebcamView({
           <div>
             {cameraError}{' '}
             {hasExhaustedFallbacks
-              ? 'Corrija o acesso e clique em tentar novamente.'
+              ? 'Libere a câmera para esta origem no navegador e clique em tentar novamente.'
               : 'Conceda acesso à câmera e recarregue se necessário.'}
           </div>
           <div className="flex gap-2">

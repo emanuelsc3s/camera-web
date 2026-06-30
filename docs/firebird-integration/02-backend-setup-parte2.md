@@ -13,7 +13,7 @@ const inspeçõesService = require('../services/inspecoes.service');
  */
 async function create(req, res, next) {
   try {
-    const { fotoBase64, referenceData, inspectionStates, observacoes, usuario, fase } = req.body;
+    const { fotoBase64, referenceData, inspectionStates, observacoes, usuarioId, usuario, fase } = req.body;
 
     // Validações básicas
     if (!fotoBase64) {
@@ -29,6 +29,7 @@ async function create(req, res, next) {
       referenceData,
       inspectionStates,
       observacoes,
+      usuarioId,
       usuario,
       fase,
     });
@@ -81,13 +82,17 @@ async function getById(req, res, next) {
 }
 
 /**
- * Deleta inspeção
+ * Exclui logicamente inspeção
  * DELETE /api/inspecoes/:id
  */
 async function remove(req, res, next) {
   try {
     const { id } = req.params;
-    const result = await inspeçõesService.deleteInspection(parseInt(id));
+    const { usuarioId, usuario } = req.body || {};
+    const result = await inspeçõesService.deleteInspection(parseInt(id), {
+      usuarioId,
+      usuario,
+    });
     res.json(result);
   } catch (error) {
     next(error);
@@ -101,13 +106,16 @@ async function remove(req, res, next) {
  */
 async function removeBatch(req, res, next) {
   try {
-    const { ids } = req.body;
+    const { ids, usuarioId, usuario } = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'IDs inválidos' });
     }
 
-    const result = await inspeçõesService.deleteMultipleInspections(ids.map(Number));
+    const result = await inspeçõesService.deleteMultipleInspections(ids.map(Number), {
+      usuarioId,
+      usuario,
+    });
     res.json(result);
   } catch (error) {
     next(error);
@@ -399,7 +407,7 @@ module.exports = errorHandler;
  * Valida dados de criação de inspeção
  */
 function validateInspectionData(req, res, next) {
-  const { fotoBase64, referenceData, inspectionStates, fase } = req.body;
+  const { fotoBase64, referenceData, inspectionStates, usuarioId, usuario, fase } = req.body;
 
   const errors = [];
 
@@ -428,6 +436,8 @@ function validateInspectionData(req, res, next) {
     for (const state of requiredStates) {
       if (!(state in inspectionStates)) {
         errors.push(`Estado '${state}' é obrigatório em inspectionStates`);
+      } else if (![true, false, null].includes(inspectionStates[state])) {
+        errors.push(`Estado '${state}' deve ser true, false ou null`);
       }
     }
   }
@@ -435,6 +445,15 @@ function validateInspectionData(req, res, next) {
   // Valida fase opcional
   if (fase && (typeof fase !== 'string' || fase.length > 10)) {
     errors.push('Campo fase deve ser texto com no máximo 10 caracteres');
+  }
+
+  // Valida auditoria opcional
+  if (usuarioId !== undefined && usuarioId !== null && !Number.isInteger(Number(usuarioId))) {
+    errors.push('Campo usuarioId deve ser um número inteiro');
+  }
+
+  if (usuario && (typeof usuario !== 'string' || usuario.length > 30)) {
+    errors.push('Campo usuario deve ser texto com no máximo 30 caracteres');
   }
 
   if (errors.length > 0) {
@@ -676,6 +695,7 @@ Thumbs.db
 -- Tabela nova e exclusiva para inspeções manuais deste projeto.
 CREATE TABLE TBINSPECAO_MANUAL (
   INSPECAO_MANUAL_ID  INTEGER NOT NULL,
+  STATUS              VARCHAR(10),
   OP_ID               INTEGER,
   OP                  VARCHAR(10),
   ERP_PRODUTO         VARCHAR(10),
@@ -688,19 +708,32 @@ CREATE TABLE TBINSPECAO_MANUAL (
   FASE                VARCHAR(10),
   DATA                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CAMINHO_FOTO        VARCHAR(500),
-  GTIN_CONFORME       SMALLINT,
-  DATAMATRIX_CONFORME SMALLINT,
-  LOTE_CONFORME       SMALLINT,
-  VALIDADE_CONFORME   SMALLINT,
+  GTIN_CONFORME       VARCHAR(3),
+  DATAMATRIX_CONFORME VARCHAR(3),
+  LOTE_CONFORME       VARCHAR(3),
+  VALIDADE_CONFORME   VARCHAR(3),
   OBSERVACOES         VARCHAR(1000),
   USUARIO_ID          INTEGER,
   USUARIO             VARCHAR(30),
   LOCALIZACAO         VARCHAR(200),
+  DATA_INC            TIMESTAMP,
+  USUARIO_I           INTEGER,
+  USUARIONOME_I       VARCHAR(30),
+  DATA_ALT            TIMESTAMP,
+  USUARIO_A           INTEGER,
+  USUARIONOME_A       VARCHAR(30),
+  DATA_DEL            TIMESTAMP,
+  USUARIO_D           INTEGER,
+  USUARIONOME_D       VARCHAR(30),
   DELETADO            CHAR(1) DEFAULT 'N',
 
   CONSTRAINT PK_TBINSPECAO_MANUAL PRIMARY KEY (INSPECAO_MANUAL_ID),
   CONSTRAINT FK_TBINSPMANUAL_OP FOREIGN KEY (OP_ID) REFERENCES TBOP(OP_ID),
-  CONSTRAINT FK_TBINSPMANUAL_LINHA FOREIGN KEY (LINHAPRODUCAO_ID) REFERENCES TBLINHA_PRODUCAO(LINHAPRODUCAO_ID)
+  CONSTRAINT FK_TBINSPMANUAL_LINHA FOREIGN KEY (LINHAPRODUCAO_ID) REFERENCES TBLINHA_PRODUCAO(LINHAPRODUCAO_ID),
+  CONSTRAINT CK_TBINSPMANUAL_GTIN_CONF CHECK (GTIN_CONFORME IN ('Sim', 'Não') OR GTIN_CONFORME IS NULL),
+  CONSTRAINT CK_TBINSPMANUAL_DATAMAT_CONF CHECK (DATAMATRIX_CONFORME IN ('Sim', 'Não') OR DATAMATRIX_CONFORME IS NULL),
+  CONSTRAINT CK_TBINSPMANUAL_LOTE_CONF CHECK (LOTE_CONFORME IN ('Sim', 'Não') OR LOTE_CONFORME IS NULL),
+  CONSTRAINT CK_TBINSPMANUAL_VALID_CONF CHECK (VALIDADE_CONFORME IN ('Sim', 'Não') OR VALIDADE_CONFORME IS NULL)
 );
 
 -- Generator para INSPECAO_MANUAL_ID
@@ -716,6 +749,12 @@ AS
 BEGIN
   IF (NEW.INSPECAO_MANUAL_ID IS NULL) THEN
     NEW.INSPECAO_MANUAL_ID = GEN_ID(GEN_TBINSPECAO_MANUAL_ID, 1);
+
+  IF (NEW.DATA_INC IS NULL) THEN
+    NEW.DATA_INC = CURRENT_TIMESTAMP;
+
+  IF (NEW.DELETADO IS NULL) THEN
+    NEW.DELETADO = 'N';
 END^
 
 SET TERM ; ^
@@ -726,12 +765,71 @@ CREATE INDEX IDX_TBINSPMANUAL_DATA ON TBINSPECAO_MANUAL(DATA DESC);
 CREATE INDEX IDX_TBINSPMANUAL_USUARIO ON TBINSPECAO_MANUAL(USUARIO);
 CREATE INDEX IDX_TBINSPMANUAL_LINHA ON TBINSPECAO_MANUAL(LINHAPRODUCAO_ID);
 CREATE INDEX IDX_TBINSPMANUAL_FASE ON TBINSPECAO_MANUAL(FASE);
+CREATE INDEX IDX_TBINSPMANUAL_STATUS ON TBINSPECAO_MANUAL(STATUS);
+CREATE INDEX IDX_TBINSPMANUAL_DATA_INC ON TBINSPECAO_MANUAL(DATA_INC DESC);
+CREATE INDEX IDX_TBINSPMANUAL_DATA_DEL ON TBINSPECAO_MANUAL(DATA_DEL);
 CREATE INDEX IDX_TBINSPMANUAL_DELETADO ON TBINSPECAO_MANUAL(DELETADO);
 
 COMMIT;
 ```
 
-### 12.2 Como executar o script
+### 12.2 Ajuste quando a tabela já existir
+
+Se a `TBINSPECAO_MANUAL` já tiver sido criada a partir de uma versão anterior da documentação, execute somente os comandos referentes aos campos, constraints e índices que ainda não existirem:
+
+```sql
+ALTER TABLE TBINSPECAO_MANUAL ADD LINHAPRODUCAO_ID INTEGER;
+ALTER TABLE TBINSPECAO_MANUAL ADD FASE VARCHAR(10);
+ALTER TABLE TBINSPECAO_MANUAL ADD STATUS VARCHAR(10);
+ALTER TABLE TBINSPECAO_MANUAL ADD DATA_INC TIMESTAMP;
+ALTER TABLE TBINSPECAO_MANUAL ADD USUARIO_I INTEGER;
+ALTER TABLE TBINSPECAO_MANUAL ADD USUARIONOME_I VARCHAR(30);
+ALTER TABLE TBINSPECAO_MANUAL ADD DATA_ALT TIMESTAMP;
+ALTER TABLE TBINSPECAO_MANUAL ADD USUARIO_A INTEGER;
+ALTER TABLE TBINSPECAO_MANUAL ADD USUARIONOME_A VARCHAR(30);
+ALTER TABLE TBINSPECAO_MANUAL ADD DATA_DEL TIMESTAMP;
+ALTER TABLE TBINSPECAO_MANUAL ADD USUARIO_D INTEGER;
+ALTER TABLE TBINSPECAO_MANUAL ADD USUARIONOME_D VARCHAR(30);
+
+ALTER TABLE TBINSPECAO_MANUAL ALTER GTIN_CONFORME TYPE VARCHAR(3);
+ALTER TABLE TBINSPECAO_MANUAL ALTER DATAMATRIX_CONFORME TYPE VARCHAR(3);
+ALTER TABLE TBINSPECAO_MANUAL ALTER LOTE_CONFORME TYPE VARCHAR(3);
+ALTER TABLE TBINSPECAO_MANUAL ALTER VALIDADE_CONFORME TYPE VARCHAR(3);
+
+UPDATE TBINSPECAO_MANUAL
+SET GTIN_CONFORME = CASE TRIM(GTIN_CONFORME) WHEN '1' THEN 'Sim' WHEN '0' THEN 'Não' ELSE GTIN_CONFORME END,
+    DATAMATRIX_CONFORME = CASE TRIM(DATAMATRIX_CONFORME) WHEN '1' THEN 'Sim' WHEN '0' THEN 'Não' ELSE DATAMATRIX_CONFORME END,
+    LOTE_CONFORME = CASE TRIM(LOTE_CONFORME) WHEN '1' THEN 'Sim' WHEN '0' THEN 'Não' ELSE LOTE_CONFORME END,
+    VALIDADE_CONFORME = CASE TRIM(VALIDADE_CONFORME) WHEN '1' THEN 'Sim' WHEN '0' THEN 'Não' ELSE VALIDADE_CONFORME END;
+
+UPDATE TBINSPECAO_MANUAL
+SET STATUS = CASE
+  WHEN 'Não' IN (GTIN_CONFORME, DATAMATRIX_CONFORME, LOTE_CONFORME, VALIDADE_CONFORME) THEN 'Rejeitado'
+  WHEN GTIN_CONFORME = 'Sim' AND DATAMATRIX_CONFORME = 'Sim' AND LOTE_CONFORME = 'Sim' AND VALIDADE_CONFORME = 'Sim' THEN 'Aprovado'
+  ELSE 'Aberto'
+END
+WHERE STATUS IS NULL;
+
+ALTER TABLE TBINSPECAO_MANUAL
+  ADD CONSTRAINT FK_TBINSPMANUAL_LINHA
+  FOREIGN KEY (LINHAPRODUCAO_ID)
+  REFERENCES TBLINHA_PRODUCAO(LINHAPRODUCAO_ID);
+
+ALTER TABLE TBINSPECAO_MANUAL ADD CONSTRAINT CK_TBINSPMANUAL_GTIN_CONF CHECK (GTIN_CONFORME IN ('Sim', 'Não') OR GTIN_CONFORME IS NULL);
+ALTER TABLE TBINSPECAO_MANUAL ADD CONSTRAINT CK_TBINSPMANUAL_DATAMAT_CONF CHECK (DATAMATRIX_CONFORME IN ('Sim', 'Não') OR DATAMATRIX_CONFORME IS NULL);
+ALTER TABLE TBINSPECAO_MANUAL ADD CONSTRAINT CK_TBINSPMANUAL_LOTE_CONF CHECK (LOTE_CONFORME IN ('Sim', 'Não') OR LOTE_CONFORME IS NULL);
+ALTER TABLE TBINSPECAO_MANUAL ADD CONSTRAINT CK_TBINSPMANUAL_VALID_CONF CHECK (VALIDADE_CONFORME IN ('Sim', 'Não') OR VALIDADE_CONFORME IS NULL);
+
+CREATE INDEX IDX_TBINSPMANUAL_LINHA ON TBINSPECAO_MANUAL(LINHAPRODUCAO_ID);
+CREATE INDEX IDX_TBINSPMANUAL_FASE ON TBINSPECAO_MANUAL(FASE);
+CREATE INDEX IDX_TBINSPMANUAL_STATUS ON TBINSPECAO_MANUAL(STATUS);
+CREATE INDEX IDX_TBINSPMANUAL_DATA_INC ON TBINSPECAO_MANUAL(DATA_INC DESC);
+CREATE INDEX IDX_TBINSPMANUAL_DATA_DEL ON TBINSPECAO_MANUAL(DATA_DEL);
+
+COMMIT;
+```
+
+### 12.3 Como executar o script
 
 ```bash
 # Usando isql (Firebird Interactive SQL)

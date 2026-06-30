@@ -9,6 +9,7 @@
 - [ ] Verificar se `TBOP` e `TBPRODUTOS` já existem e estão populadas no banco atual
 - [ ] Criar apenas a nova tabela `TBINSPECAO_MANUAL` para inspeções manuais deste projeto
 - [ ] Confirmar que a tabela `TBINSPECAO` existente permanecerá reservada para o projeto SICFAR
+- [ ] Validar `LINHAPRODUCAO_ID`, `FASE`, `STATUS`, conformes `VARCHAR(3)` e campos de auditoria na `TBINSPECAO_MANUAL`
 - [ ] Ajustar nomes de campos se necessário
 - [ ] Validar tipos de dados
 - [ ] Verificar permissões do usuário Firebird
@@ -64,14 +65,14 @@
   - [ ] createOrUpdateProduct()
 - [ ] Implementar `fotos.service.js`
   - [ ] savePhotoFromBase64()
-  - [ ] deletePhoto()
+  - [ ] deletePhoto() apenas para rotinas de manutenção, fora da exclusão lógica
   - [ ] photoExists()
 - [ ] Implementar `inspecoes.service.js`
   - [ ] createInspection()
   - [ ] getInspections()
   - [ ] getInspectionById()
-  - [ ] deleteInspection()
-  - [ ] deleteMultipleInspections()
+  - [ ] deleteInspection() com exclusão lógica e auditoria
+  - [ ] deleteMultipleInspections() com exclusão lógica e auditoria
 - [ ] Testar cada serviço isoladamente
 
 #### 3.2 Controllers 🎮
@@ -112,7 +113,7 @@
 - [ ] Testar listagem de inspeções
 - [ ] Testar paginação
 - [ ] Testar filtros
-- [ ] Testar exclusão
+- [ ] Testar exclusão lógica com usuário de auditoria
 - [ ] Testar upload de fotos
 - [ ] Testar recuperação de fotos
 - [ ] Validar tratamento de erros
@@ -174,11 +175,12 @@
 - [ ] Testar visualização de detalhes
 - [ ] Testar visualização de fotos
 
-#### 6.3 Exclusão 🗑️
-- [ ] Testar exclusão individual
-- [ ] Testar exclusão múltipla
-- [ ] Verificar fotos deletadas do servidor
-- [ ] Verificar registros deletados do banco
+#### 6.3 Exclusão lógica 🗑️
+- [ ] Testar exclusão lógica individual
+- [ ] Testar exclusão lógica múltipla
+- [ ] Verificar fotos preservadas no servidor
+- [ ] Verificar registros marcados com `DELETADO = 'S'`
+- [ ] Verificar preenchimento de `DATA_DEL`, `USUARIO_D` e `USUARIONOME_D`
 
 #### 6.4 Exportação 📤
 - [ ] Testar exportação JSON
@@ -243,7 +245,7 @@
 #### Auditoria 📊
 - [ ] Log de todas as ações
 - [ ] Histórico de modificações
-- [ ] Rastreamento de quem criou/deletou registros
+- [ ] Rastreamento de quem criou, alterou e excluiu logicamente registros
 - [ ] Relatório de atividades
 
 #### Validações Avançadas ✔️
@@ -317,7 +319,7 @@ Antes de considerar o projeto completo, validar:
 - [ ] ✅ Listagem mostra inspeções ordenadas por data
 - [ ] ✅ Paginação funciona corretamente
 - [ ] ✅ Filtros de busca retornam resultados corretos
-- [ ] ✅ Exclusão remove foto e registro
+- [ ] ✅ Exclusão lógica preserva foto e marca registro com auditoria
 - [ ] ✅ Exportação gera JSON válido
 
 ### Performance ⚡

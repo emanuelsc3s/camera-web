@@ -522,6 +522,7 @@ async function savePhotoFromBase64(base64Data, idInspecao) {
 
 /**
  * Deleta foto do sistema de arquivos
+ * Uso restrito a rotinas de manutenção; a exclusão de inspeções é lógica e preserva fotos.
  */
 async function deletePhoto(photoPath) {
   try {
@@ -575,7 +576,7 @@ const produtosService = require('./produtos.service');
  * Cria nova inspeção
  */
 async function createInspection(data) {
-  const { fotoBase64, referenceData, inspectionStates, observacoes, usuario, fase } = data;
+  const { fotoBase64, referenceData, inspectionStates, observacoes, usuarioId, usuario, fase } = data;
 
   try {
     // 1. Resolver referência de OP/produto no banco atual
@@ -594,19 +595,30 @@ async function createInspection(data) {
         GTIN,
         LINHAPRODUCAO_ID,
         FASE,
+        STATUS,
         CAMINHO_FOTO,
         GTIN_CONFORME,
         DATAMATRIX_CONFORME,
         LOTE_CONFORME,
         VALIDADE_CONFORME,
         OBSERVACOES,
-        USUARIO
+        USUARIO_ID,
+        USUARIO,
+        DATA_INC,
+        USUARIO_I,
+        USUARIONOME_I
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
       RETURNING INSPECAO_MANUAL_ID
     `;
 
-    const conformeToInt = (value) => (value === true ? 1 : value === false ? 0 : null);
+    const conformeToText = (value) => (value === true ? 'Sim' : value === false ? 'Não' : null);
+    const resolveInspectionStatus = (states) => {
+      const values = [states.gtin, states.datamatrix, states.lote, states.validade];
+      if (values.some((value) => value === false)) return 'Rejeitado';
+      if (values.every((value) => value === true)) return 'Aprovado';
+      return 'Aberto';
+    };
 
     const inspectionResult = await db.query(sqlInspection, [
       opReference.OP_ID,
@@ -619,11 +631,15 @@ async function createInspection(data) {
       opReference.GTIN,
       opReference.LINHAPRODUCAO_ID,
       fase || null,
-      conformeToInt(inspectionStates.gtin),
-      conformeToInt(inspectionStates.datamatrix),
-      conformeToInt(inspectionStates.lote),
-      conformeToInt(inspectionStates.validade),
+      resolveInspectionStatus(inspectionStates),
+      conformeToText(inspectionStates.gtin),
+      conformeToText(inspectionStates.datamatrix),
+      conformeToText(inspectionStates.lote),
+      conformeToText(inspectionStates.validade),
       observacoes || null,
+      usuarioId || null,
+      usuario || null,
+      usuarioId || null,
       usuario || null,
     ]);
 
@@ -633,6 +649,7 @@ async function createInspection(data) {
     const photoPath = await fotosService.savePhotoFromBase64(fotoBase64, idInspecao);
 
     // 4. Atualizar caminho da foto na inspeção
+    // Atualização técnica do próprio fluxo de criação; não preenche auditoria de alteração.
     const sqlUpdatePhoto = `
       UPDATE TBINSPECAO_MANUAL
       SET CAMINHO_FOTO = ?
@@ -688,6 +705,10 @@ async function getInspections(filters = {}) {
         whereClause = 'WHERE i.FASE LIKE ?';
         params.push(`%${termo}%`);
         break;
+      case 'status':
+        whereClause = 'WHERE i.STATUS = ?';
+        params.push(termo);
+        break;
       case 'linhaProducaoId':
         whereClause = 'WHERE i.LINHAPRODUCAO_ID = ?';
         params.push(Number(termo));
@@ -717,7 +738,17 @@ async function getInspections(filters = {}) {
       i.REGISTRO_ANVISA,
       i.GTIN,
       i.LINHAPRODUCAO_ID,
-      i.FASE
+      i.FASE,
+      i.STATUS,
+      i.DATA_INC,
+      i.USUARIO_I,
+      i.USUARIONOME_I,
+      i.DATA_ALT,
+      i.USUARIO_A,
+      i.USUARIONOME_A,
+      i.DATA_DEL,
+      i.USUARIO_D,
+      i.USUARIONOME_D
     FROM TBINSPECAO_MANUAL i
     ${whereClause}
     ${whereClause ? 'AND' : 'WHERE'} COALESCE(i.DELETADO, 'N') = 'N'
@@ -770,7 +801,17 @@ async function getInspectionById(id) {
       i.REGISTRO_ANVISA,
       i.GTIN,
       i.LINHAPRODUCAO_ID,
-      i.FASE
+      i.FASE,
+      i.STATUS,
+      i.DATA_INC,
+      i.USUARIO_I,
+      i.USUARIONOME_I,
+      i.DATA_ALT,
+      i.USUARIO_A,
+      i.USUARIONOME_A,
+      i.DATA_DEL,
+      i.USUARIO_D,
+      i.USUARIONOME_D
     FROM TBINSPECAO_MANUAL i
     WHERE i.INSPECAO_MANUAL_ID = ?
       AND COALESCE(i.DELETADO, 'N') = 'N'
@@ -781,46 +822,51 @@ async function getInspectionById(id) {
 }
 
 /**
- * Deleta inspeção
+ * Exclui logicamente inspeção
  */
-async function deleteInspection(id) {
-  // Busca caminho da foto antes de deletar
+async function deleteInspection(id, audit = {}) {
+  // Busca registro antes de aplicar exclusão lógica
   const inspection = await getInspectionById(id);
 
   if (!inspection) {
     throw new Error('Inspeção não encontrada');
   }
 
-  // Deleta registro do banco
-  const sql = 'DELETE FROM TBINSPECAO_MANUAL WHERE INSPECAO_MANUAL_ID = ?';
-  await db.query(sql, [id]);
+  const { usuarioId, usuario } = audit;
 
-  // Deleta foto do sistema de arquivos
-  if (inspection.foto) {
-    const photoPath = inspection.foto.replace('/api/fotos/', '');
-    await fotosService.deletePhoto(photoPath);
-  }
+  // Exclusão lógica: mantém registro e foto para rastreabilidade
+  const sql = `
+    UPDATE TBINSPECAO_MANUAL
+    SET DELETADO = 'S',
+        DATA_DEL = CURRENT_TIMESTAMP,
+        USUARIO_D = ?,
+        USUARIONOME_D = ?
+    WHERE INSPECAO_MANUAL_ID = ?
+      AND COALESCE(DELETADO, 'N') = 'N'
+  `;
 
-  return { message: 'Inspeção deletada com sucesso' };
+  await db.query(sql, [usuarioId || null, usuario || null, id]);
+
+  return { message: 'Inspeção excluída logicamente com sucesso' };
 }
 
 /**
- * Deleta múltiplas inspeções
+ * Exclui logicamente múltiplas inspeções
  */
-async function deleteMultipleInspections(ids) {
+async function deleteMultipleInspections(ids, audit = {}) {
   let deletedCount = 0;
 
   for (const id of ids) {
     try {
-      await deleteInspection(id);
+      await deleteInspection(id, audit);
       deletedCount++;
     } catch (error) {
-      console.error(`Erro ao deletar inspeção ${id}:`, error);
+      console.error(`Erro ao excluir logicamente inspeção ${id}:`, error);
     }
   }
 
   return {
-    message: `${deletedCount} inspeção(ões) deletada(s) com sucesso`,
+    message: `${deletedCount} inspeção(ões) excluída(s) logicamente com sucesso`,
     deletedCount,
   };
 }
@@ -829,7 +875,7 @@ async function deleteMultipleInspections(ids) {
  * Formata registro de inspeção para o formato esperado pelo frontend
  */
 function formatInspectionRecord(record) {
-  const intToConforme = (value) => (value === 1 ? true : value === 0 ? false : null);
+  const textToConforme = (value) => (value === 'Sim' ? true : value === 'Não' ? false : null);
 
   return {
     id: String(record.INSPECAO_MANUAL_ID),
@@ -846,11 +892,23 @@ function formatInspectionRecord(record) {
     },
     linhaProducaoId: record.LINHAPRODUCAO_ID,
     fase: record.FASE,
+    status: record.STATUS,
+    auditoria: {
+      criadoEm: record.DATA_INC,
+      criadoPorId: record.USUARIO_I,
+      criadoPorNome: record.USUARIONOME_I,
+      alteradoEm: record.DATA_ALT,
+      alteradoPorId: record.USUARIO_A,
+      alteradoPorNome: record.USUARIONOME_A,
+      excluidoEm: record.DATA_DEL,
+      excluidoPorId: record.USUARIO_D,
+      excluidoPorNome: record.USUARIONOME_D,
+    },
     inspectionStates: {
-      gtin: intToConforme(record.GTIN_CONFORME),
-      datamatrix: intToConforme(record.DATAMATRIX_CONFORME),
-      lote: intToConforme(record.LOTE_CONFORME),
-      validade: intToConforme(record.VALIDADE_CONFORME),
+      gtin: textToConforme(record.GTIN_CONFORME),
+      datamatrix: textToConforme(record.DATAMATRIX_CONFORME),
+      lote: textToConforme(record.LOTE_CONFORME),
+      validade: textToConforme(record.VALIDADE_CONFORME),
     },
     observacoes: record.OBSERVACOES,
     usuario: record.USUARIO,

@@ -147,10 +147,13 @@ Este documento apresenta uma visão geral da arquitetura de integração entre a
 │  │  - OP              │    │   │  - OP_ID (FK opcional) ──┤    │
 │  │  - LOTE            │    └───┤  - DATA                  │    │
 │  │  - VALIDADE        │        │  - CAMINHO_FOTO          │    │
-│  │  - GTIN            │        │  - campos *_CONFORME     │    │
+│  │  - GTIN            │        │  - *_CONFORME: Sim/Não   │    │
 │  │  - ANVISA          │        │  - OBSERVACOES           │    │
 │  └────────────────────┘        │  - LINHAPRODUCAO_ID      │    │
 │          │                     │  - FASE                  │    │
+│          │                     │  - STATUS                │    │
+│          │                     │  - DATA_INC / DATA_ALT   │    │
+│          │                     │  - DATA_DEL / USUARIO_*  │    │
 │          │                     │  - USUARIO               │    │
 │          │                     └──────────────────────────┘    │
 │          │ consulta auxiliar                                   │

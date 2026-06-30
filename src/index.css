@@ -60,3 +60,22 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+@layer utilities {
+  @keyframes face-id-scan {
+    0%,
+    100% {
+      top: 0;
+      opacity: 0.25;
+    }
+
+    50% {
+      top: calc(100% - 1px);
+      opacity: 0.9;
+    }
+  }
+
+  .face-id-scan-line {
+    animation: face-id-scan 2.4s ease-in-out infinite;
+  }
+}

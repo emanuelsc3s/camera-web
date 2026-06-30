@@ -20,11 +20,25 @@ interface InspectionRecord {
   foto: string                   // Base64 data URL da imagem
   referenceData: ReferenceData   // Dados de referência do produto
   inspectionStates: InspectionStates  // Estados de conformidade
-  linhaProducaoId?: number    // Referência opcional à TBLINHA_PRODUCAO
-  fase?: string                // Fase da inspeção manual
-  observacoes?: string           // Campo opcional (não implementado)
-  usuario?: string               // Campo opcional (não implementado)
+  linhaProducaoId?: number | null  // Referência opcional à TBLINHA_PRODUCAO
+  fase?: string | null             // Fase da inspeção manual
+  status?: string | null           // Status da inspeção: Aberto, Aprovado ou Rejeitado
+  auditoria?: AuditData        // Dados de criação, alteração e exclusão lógica
+  observacoes?: string | null    // Observações da inspeção manual
+  usuario?: string | null        // Operador/responsável pela inspeção
   localizacao?: string           // Campo opcional (não implementado)
+}
+
+interface AuditData {
+  criadoEm?: string | null
+  criadoPorId?: number | null
+  criadoPorNome?: string | null
+  alteradoEm?: string | null
+  alteradoPorId?: number | null
+  alteradoPorNome?: string | null
+  excluidoEm?: string | null
+  excluidoPorId?: number | null
+  excluidoPorNome?: string | null
 }
 ```
 
@@ -92,6 +106,10 @@ O DDL anexado foi gerado pelo IBExpert em **30/06/2026 08:47:13** para o banco `
 - A tabela de produtos em uso no projeto é `TBPRODUTOS`. O DDL anexado mostra a estrutura equivalente como `TBPRODUTO`; mantenha o nome operacional `TBPRODUTOS`.
 - Os dados de OP, lote, validade, GTIN e ANVISA aparecem no metadado atual em `TBOP`.
 - O campo `LINHAPRODUCAO_ID` da inspeção manual referencia `TBLINHA_PRODUCAO(LINHAPRODUCAO_ID)`.
+- O campo `STATUS` da inspeção manual segue a estrutura da `TBINSPECAO`: `VARCHAR(10)`.
+- Os campos `GTIN_CONFORME`, `DATAMATRIX_CONFORME`, `LOTE_CONFORME` e `VALIDADE_CONFORME` devem ser `VARCHAR(3)`, gravando `Sim`, `Não` ou `NULL` quando não marcado.
+- A auditoria por registro segue o padrão das tabelas atuais do banco: campos `DATA_INC`/`USUARIO_I`/`USUARIONOME_I`, `DATA_ALT`/`USUARIO_A`/`USUARIONOME_A` e `DATA_DEL`/`USUARIO_D`/`USUARIONOME_D`.
+- Exclusões da API devem ser lógicas: preencher `DELETADO = 'S'`, `DATA_DEL`, `USUARIO_D` e `USUARIONOME_D`, mantendo o registro e a foto disponíveis para rastreabilidade.
 
 ### 3.1 Estrutura de Tabelas
 
@@ -154,6 +172,7 @@ CREATE INDEX TBOP_LOTE ON TBOP(LOTE);
 ```sql
 CREATE TABLE TBINSPECAO_MANUAL (
   INSPECAO_MANUAL_ID  INTEGER NOT NULL,
+  STATUS              VARCHAR(10),
   OP_ID               INTEGER,
   OP                  VARCHAR(10),
   ERP_PRODUTO         VARCHAR(10),
@@ -166,19 +185,32 @@ CREATE TABLE TBINSPECAO_MANUAL (
   FASE                VARCHAR(10),
   DATA                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CAMINHO_FOTO        VARCHAR(500),
-  GTIN_CONFORME       SMALLINT,        -- 1 = conforme, 0 = não conforme, NULL = não marcado
-  DATAMATRIX_CONFORME SMALLINT,
-  LOTE_CONFORME       SMALLINT,
-  VALIDADE_CONFORME   SMALLINT,
+  GTIN_CONFORME       VARCHAR(3),      -- 'Sim' = conforme, 'Não' = não conforme, NULL = não marcado
+  DATAMATRIX_CONFORME VARCHAR(3),
+  LOTE_CONFORME       VARCHAR(3),
+  VALIDADE_CONFORME   VARCHAR(3),
   OBSERVACOES         VARCHAR(1000),
   USUARIO_ID          INTEGER,
   USUARIO             VARCHAR(30),
   LOCALIZACAO         VARCHAR(200),
+  DATA_INC            TIMESTAMP,
+  USUARIO_I           INTEGER,
+  USUARIONOME_I       VARCHAR(30),
+  DATA_ALT            TIMESTAMP,
+  USUARIO_A           INTEGER,
+  USUARIONOME_A       VARCHAR(30),
+  DATA_DEL            TIMESTAMP,
+  USUARIO_D           INTEGER,
+  USUARIONOME_D       VARCHAR(30),
   DELETADO            CHAR(1) DEFAULT 'N',
 
   CONSTRAINT PK_TBINSPECAO_MANUAL PRIMARY KEY (INSPECAO_MANUAL_ID),
   CONSTRAINT FK_TBINSPMANUAL_OP FOREIGN KEY (OP_ID) REFERENCES TBOP(OP_ID),
-  CONSTRAINT FK_TBINSPMANUAL_LINHA FOREIGN KEY (LINHAPRODUCAO_ID) REFERENCES TBLINHA_PRODUCAO(LINHAPRODUCAO_ID)
+  CONSTRAINT FK_TBINSPMANUAL_LINHA FOREIGN KEY (LINHAPRODUCAO_ID) REFERENCES TBLINHA_PRODUCAO(LINHAPRODUCAO_ID),
+  CONSTRAINT CK_TBINSPMANUAL_GTIN_CONF CHECK (GTIN_CONFORME IN ('Sim', 'Não') OR GTIN_CONFORME IS NULL),
+  CONSTRAINT CK_TBINSPMANUAL_DATAMAT_CONF CHECK (DATAMATRIX_CONFORME IN ('Sim', 'Não') OR DATAMATRIX_CONFORME IS NULL),
+  CONSTRAINT CK_TBINSPMANUAL_LOTE_CONF CHECK (LOTE_CONFORME IN ('Sim', 'Não') OR LOTE_CONFORME IS NULL),
+  CONSTRAINT CK_TBINSPMANUAL_VALID_CONF CHECK (VALIDADE_CONFORME IN ('Sim', 'Não') OR VALIDADE_CONFORME IS NULL)
 );
 
 -- Generator para auto-incremento
@@ -192,6 +224,12 @@ AS
 BEGIN
   IF (NEW.INSPECAO_MANUAL_ID IS NULL) THEN
     NEW.INSPECAO_MANUAL_ID = GEN_ID(GEN_TBINSPECAO_MANUAL_ID, 1);
+
+  IF (NEW.DATA_INC IS NULL) THEN
+    NEW.DATA_INC = CURRENT_TIMESTAMP;
+
+  IF (NEW.DELETADO IS NULL) THEN
+    NEW.DELETADO = 'N';
 END;
 
 -- Índices para otimizar buscas
@@ -200,8 +238,88 @@ CREATE INDEX IDX_TBINSPMANUAL_DATA ON TBINSPECAO_MANUAL(DATA DESC);
 CREATE INDEX IDX_TBINSPMANUAL_USUARIO ON TBINSPECAO_MANUAL(USUARIO);
 CREATE INDEX IDX_TBINSPMANUAL_LINHA ON TBINSPECAO_MANUAL(LINHAPRODUCAO_ID);
 CREATE INDEX IDX_TBINSPMANUAL_FASE ON TBINSPECAO_MANUAL(FASE);
+CREATE INDEX IDX_TBINSPMANUAL_STATUS ON TBINSPECAO_MANUAL(STATUS);
+CREATE INDEX IDX_TBINSPMANUAL_DATA_INC ON TBINSPECAO_MANUAL(DATA_INC DESC);
+CREATE INDEX IDX_TBINSPMANUAL_DATA_DEL ON TBINSPECAO_MANUAL(DATA_DEL);
 CREATE INDEX IDX_TBINSPMANUAL_DELETADO ON TBINSPECAO_MANUAL(DELETADO);
 ```
+
+#### Ajuste se a `TBINSPECAO_MANUAL` já existir
+
+Se uma versão anterior da tabela já tiver sido criada, execute apenas os comandos referentes aos campos, constraints e índices que ainda não existirem no banco:
+
+```sql
+ALTER TABLE TBINSPECAO_MANUAL ADD LINHAPRODUCAO_ID INTEGER;
+ALTER TABLE TBINSPECAO_MANUAL ADD FASE VARCHAR(10);
+ALTER TABLE TBINSPECAO_MANUAL ADD STATUS VARCHAR(10);
+ALTER TABLE TBINSPECAO_MANUAL ADD DATA_INC TIMESTAMP;
+ALTER TABLE TBINSPECAO_MANUAL ADD USUARIO_I INTEGER;
+ALTER TABLE TBINSPECAO_MANUAL ADD USUARIONOME_I VARCHAR(30);
+ALTER TABLE TBINSPECAO_MANUAL ADD DATA_ALT TIMESTAMP;
+ALTER TABLE TBINSPECAO_MANUAL ADD USUARIO_A INTEGER;
+ALTER TABLE TBINSPECAO_MANUAL ADD USUARIONOME_A VARCHAR(30);
+ALTER TABLE TBINSPECAO_MANUAL ADD DATA_DEL TIMESTAMP;
+ALTER TABLE TBINSPECAO_MANUAL ADD USUARIO_D INTEGER;
+ALTER TABLE TBINSPECAO_MANUAL ADD USUARIONOME_D VARCHAR(30);
+
+ALTER TABLE TBINSPECAO_MANUAL ALTER GTIN_CONFORME TYPE VARCHAR(3);
+ALTER TABLE TBINSPECAO_MANUAL ALTER DATAMATRIX_CONFORME TYPE VARCHAR(3);
+ALTER TABLE TBINSPECAO_MANUAL ALTER LOTE_CONFORME TYPE VARCHAR(3);
+ALTER TABLE TBINSPECAO_MANUAL ALTER VALIDADE_CONFORME TYPE VARCHAR(3);
+
+UPDATE TBINSPECAO_MANUAL
+SET GTIN_CONFORME = CASE TRIM(GTIN_CONFORME) WHEN '1' THEN 'Sim' WHEN '0' THEN 'Não' ELSE GTIN_CONFORME END,
+    DATAMATRIX_CONFORME = CASE TRIM(DATAMATRIX_CONFORME) WHEN '1' THEN 'Sim' WHEN '0' THEN 'Não' ELSE DATAMATRIX_CONFORME END,
+    LOTE_CONFORME = CASE TRIM(LOTE_CONFORME) WHEN '1' THEN 'Sim' WHEN '0' THEN 'Não' ELSE LOTE_CONFORME END,
+    VALIDADE_CONFORME = CASE TRIM(VALIDADE_CONFORME) WHEN '1' THEN 'Sim' WHEN '0' THEN 'Não' ELSE VALIDADE_CONFORME END;
+
+UPDATE TBINSPECAO_MANUAL
+SET STATUS = CASE
+  WHEN 'Não' IN (GTIN_CONFORME, DATAMATRIX_CONFORME, LOTE_CONFORME, VALIDADE_CONFORME) THEN 'Rejeitado'
+  WHEN GTIN_CONFORME = 'Sim' AND DATAMATRIX_CONFORME = 'Sim' AND LOTE_CONFORME = 'Sim' AND VALIDADE_CONFORME = 'Sim' THEN 'Aprovado'
+  ELSE 'Aberto'
+END
+WHERE STATUS IS NULL;
+
+ALTER TABLE TBINSPECAO_MANUAL
+  ADD CONSTRAINT FK_TBINSPMANUAL_LINHA
+  FOREIGN KEY (LINHAPRODUCAO_ID)
+  REFERENCES TBLINHA_PRODUCAO(LINHAPRODUCAO_ID);
+
+ALTER TABLE TBINSPECAO_MANUAL ADD CONSTRAINT CK_TBINSPMANUAL_GTIN_CONF CHECK (GTIN_CONFORME IN ('Sim', 'Não') OR GTIN_CONFORME IS NULL);
+ALTER TABLE TBINSPECAO_MANUAL ADD CONSTRAINT CK_TBINSPMANUAL_DATAMAT_CONF CHECK (DATAMATRIX_CONFORME IN ('Sim', 'Não') OR DATAMATRIX_CONFORME IS NULL);
+ALTER TABLE TBINSPECAO_MANUAL ADD CONSTRAINT CK_TBINSPMANUAL_LOTE_CONF CHECK (LOTE_CONFORME IN ('Sim', 'Não') OR LOTE_CONFORME IS NULL);
+ALTER TABLE TBINSPECAO_MANUAL ADD CONSTRAINT CK_TBINSPMANUAL_VALID_CONF CHECK (VALIDADE_CONFORME IN ('Sim', 'Não') OR VALIDADE_CONFORME IS NULL);
+
+CREATE INDEX IDX_TBINSPMANUAL_LINHA ON TBINSPECAO_MANUAL(LINHAPRODUCAO_ID);
+CREATE INDEX IDX_TBINSPMANUAL_FASE ON TBINSPECAO_MANUAL(FASE);
+CREATE INDEX IDX_TBINSPMANUAL_STATUS ON TBINSPECAO_MANUAL(STATUS);
+CREATE INDEX IDX_TBINSPMANUAL_DATA_INC ON TBINSPECAO_MANUAL(DATA_INC DESC);
+CREATE INDEX IDX_TBINSPMANUAL_DATA_DEL ON TBINSPECAO_MANUAL(DATA_DEL);
+```
+
+#### Regras de Auditoria da `TBINSPECAO_MANUAL`
+
+| Operação | Campos preenchidos | Regra |
+|----------|--------------------|-------|
+| Criação | `DATA_INC`, `USUARIO_I`, `USUARIONOME_I` | Preencher no `INSERT`; `DATA_INC` deve usar `CURRENT_TIMESTAMP` |
+| Alteração de usuário | `DATA_ALT`, `USUARIO_A`, `USUARIONOME_A` | Preencher em operações futuras de edição manual |
+| Exclusão lógica | `DATA_DEL`, `USUARIO_D`, `USUARIONOME_D`, `DELETADO` | Usar `UPDATE`, não `DELETE`; marcar `DELETADO = 'S'` |
+| Consulta padrão | `DELETADO` | Filtrar com `COALESCE(DELETADO, 'N') = 'N'` |
+
+`USUARIO` e `USUARIO_ID` podem continuar representando o operador/responsável pela inspeção. Os campos `USUARIO_I`, `USUARIO_A` e `USUARIO_D` representam a auditoria da operação realizada no registro.
+
+#### Regras de Conformidade e `STATUS`
+
+| Campo | Tipo | Valores |
+|-------|------|---------|
+| `GTIN_CONFORME` | `VARCHAR(3)` | `Sim`, `Não` ou `NULL` |
+| `DATAMATRIX_CONFORME` | `VARCHAR(3)` | `Sim`, `Não` ou `NULL` |
+| `LOTE_CONFORME` | `VARCHAR(3)` | `Sim`, `Não` ou `NULL` |
+| `VALIDADE_CONFORME` | `VARCHAR(3)` | `Sim`, `Não` ou `NULL` |
+| `STATUS` | `VARCHAR(10)` | `Aberto`, `Aprovado` ou `Rejeitado` |
+
+Regra de cálculo do `STATUS`: usar `Rejeitado` se qualquer item estiver como `Não`; usar `Aprovado` se todos os itens estiverem como `Sim`; usar `Aberto` quando ainda houver item `NULL`.
 
 ### 3.2 Armazenamento de Fotos
 
@@ -236,8 +354,8 @@ backend/
 | `saveInspectionRecord(record)` | `/api/inspecoes` | POST | Cria nova inspeção |
 | `getAllRecords()` | `/api/inspecoes` | GET | Lista todas as inspeções |
 | `getRecordById(id)` | `/api/inspecoes/:id` | GET | Busca inspeção específica |
-| `deleteRecord(id)` | `/api/inspecoes/:id` | DELETE | Exclui uma inspeção |
-| `deleteMultipleRecords(ids)` | `/api/inspecoes/batch` | DELETE | Exclui múltiplas inspeções |
+| `deleteRecord(id)` | `/api/inspecoes/:id` | DELETE | Exclui logicamente uma inspeção |
+| `deleteMultipleRecords(ids)` | `/api/inspecoes/batch` | DELETE | Exclui logicamente múltiplas inspeções |
 | `clearAllRecords()` | *(não implementar)* | - | Operação perigosa - não expor |
 
 ### 4.2 Operações de Busca e Filtro
@@ -273,6 +391,8 @@ backend/
 ```json
 {
   "fotoBase64": "data:image/jpeg;base64,...",
+  "usuarioId": 12,
+  "usuario": "João Silva",
   "referenceData": {
     "op": "12345",
     "lote": "L2024001",
@@ -321,11 +441,23 @@ ORDER BY o.DATA_INC DESC;
 -- 2. Inserir inspeção manual
 INSERT INTO TBINSPECAO_MANUAL (
   OP_ID, OP, ERP_PRODUTO, PRODUTO, LOTE, VALIDADE, REGISTRO_ANVISA, GTIN,
-  LINHAPRODUCAO_ID, FASE, DATA, CAMINHO_FOTO,
-  GTIN_CONFORME, DATAMATRIX_CONFORME, LOTE_CONFORME, VALIDADE_CONFORME
+  LINHAPRODUCAO_ID, FASE, STATUS, DATA, CAMINHO_FOTO,
+  GTIN_CONFORME, DATAMATRIX_CONFORME, LOTE_CONFORME, VALIDADE_CONFORME,
+  USUARIO_ID, USUARIO, DATA_INC, USUARIO_I, USUARIONOME_I
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
 RETURNING INSPECAO_MANUAL_ID;
+```
+
+**SQL executado na exclusão lógica:**
+```sql
+UPDATE TBINSPECAO_MANUAL
+SET DELETADO = 'S',
+    DATA_DEL = CURRENT_TIMESTAMP,
+    USUARIO_D = ?,
+    USUARIONOME_D = ?
+WHERE INSPECAO_MANUAL_ID = ?
+  AND COALESCE(DELETADO, 'N') = 'N';
 ```
 
 ### 5.2 Firebird → Frontend (Buscar Inspeções)
@@ -349,7 +481,17 @@ SELECT
   i.REGISTRO_ANVISA,
   i.GTIN,
   i.LINHAPRODUCAO_ID,
-  i.FASE
+  i.FASE,
+  i.STATUS,
+  i.DATA_INC,
+  i.USUARIO_I,
+  i.USUARIONOME_I,
+  i.DATA_ALT,
+  i.USUARIO_A,
+  i.USUARIONOME_A,
+  i.DATA_DEL,
+  i.USUARIO_D,
+  i.USUARIONOME_D
 FROM TBINSPECAO_MANUAL i
 WHERE COALESCE(i.DELETADO, 'N') = 'N'
 ORDER BY i.DATA DESC
@@ -375,6 +517,18 @@ ROWS ? TO ?;
       },
       "linhaProducaoId": 1,
       "fase": "Fase 1",
+      "status": "Rejeitado",
+      "auditoria": {
+        "criadoEm": "2025-11-05T14:32:03.000Z",
+        "criadoPorId": 12,
+        "criadoPorNome": "João Silva",
+        "alteradoEm": null,
+        "alteradoPorId": null,
+        "alteradoPorNome": null,
+        "excluidoEm": null,
+        "excluidoPorId": null,
+        "excluidoPorNome": null
+      },
       "inspectionStates": {
         "gtin": true,
         "datamatrix": true,

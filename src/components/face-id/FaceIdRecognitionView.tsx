@@ -51,6 +51,8 @@ export function FaceIdRecognitionView({
       <FaceIdWebcamView
         mode="recognize"
         boxes={boxes}
+        status={status}
+        trackingEnabled={canRecognize}
         onFrameProcess={canRecognize ? onFrameProcess : undefined}
         onCameraError={onCameraError}
       />

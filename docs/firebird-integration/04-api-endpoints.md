@@ -130,9 +130,14 @@ Cria nova inspeção.
   },
   "fase": "Fase 1",
   "observacoes": "Lote com falha na impressão",
+  "usuarioId": 12,
   "usuario": "João Silva"
 }
 ```
+
+`usuarioId` e `usuario` são opcionais, mas devem ser enviados quando houver usuário autenticado. Na criação eles preenchem `USUARIO_ID`/`USUARIO` e também a auditoria de inclusão (`USUARIO_I`/`USUARIONOME_I`), enquanto `DATA_INC` é preenchida com `CURRENT_TIMESTAMP`. O campo `fase` deve ter no máximo 10 caracteres.
+
+No banco, os campos `GTIN_CONFORME`, `DATAMATRIX_CONFORME`, `LOTE_CONFORME` e `VALIDADE_CONFORME` são gravados como `VARCHAR(3)` com `Sim`, `Não` ou `NULL`. O `STATUS` é `VARCHAR(10)`, seguindo a `TBINSPECAO`: `Aprovado` quando todos os itens estiverem conformes, `Rejeitado` quando houver algum item não conforme e `Aberto` quando houver marcação pendente.
 
 **Response 201 Created:**
 ```json
@@ -162,7 +167,7 @@ Lista inspeções com paginação e filtros.
 **Query Parameters:**
 - `page` (number, opcional) - Número da página (padrão: 1)
 - `limit` (number, opcional) - Registros por página (padrão: 10)
-- `campo` (string, opcional) - Campo para filtrar: 'op', 'lote', 'produto', 'gtin', 'usuario', 'fase', 'linhaProducaoId'
+- `campo` (string, opcional) - Campo para filtrar: 'op', 'lote', 'produto', 'gtin', 'usuario', 'fase', 'status', 'linhaProducaoId'
 - `termo` (string, opcional) - Termo de busca
 
 **Exemplos:**
@@ -172,6 +177,7 @@ GET /api/inspecoes?page=2&limit=25
 GET /api/inspecoes?campo=op&termo=12345
 GET /api/inspecoes?campo=usuario&termo=João
 GET /api/inspecoes?campo=fase&termo=Fase%201
+GET /api/inspecoes?campo=status&termo=Rejeitado
 GET /api/inspecoes?campo=linhaProducaoId&termo=1
 ```
 
@@ -200,6 +206,18 @@ GET /api/inspecoes?campo=linhaProducaoId&termo=1
       },
       "linhaProducaoId": 1,
       "fase": "Fase 1",
+      "status": "Rejeitado",
+      "auditoria": {
+        "criadoEm": "2025-11-05T14:32:03.000Z",
+        "criadoPorId": 12,
+        "criadoPorNome": "João Silva",
+        "alteradoEm": null,
+        "alteradoPorId": null,
+        "alteradoPorNome": null,
+        "excluidoEm": null,
+        "excluidoPorId": null,
+        "excluidoPorNome": null
+      },
       "observacoes": "Lote com falha na impressão",
       "usuario": "João Silva"
     }
@@ -243,6 +261,18 @@ Busca inspeção específica por ID.
   },
   "linhaProducaoId": 1,
   "fase": "Fase 1",
+  "status": "Rejeitado",
+  "auditoria": {
+    "criadoEm": "2025-11-05T14:32:03.000Z",
+    "criadoPorId": 12,
+    "criadoPorNome": "João Silva",
+    "alteradoEm": null,
+    "alteradoPorId": null,
+    "alteradoPorNome": null,
+    "excluidoEm": null,
+    "excluidoPorId": null,
+    "excluidoPorNome": null
+  },
   "observacoes": null,
   "usuario": null
 }
@@ -259,15 +289,25 @@ Busca inspeção específica por ID.
 
 ### 3.4 DELETE `/inspecoes/:id`
 
-Exclui inspeção.
+Exclui logicamente inspeção.
+
+A exclusão é lógica. A API atualiza `DELETADO = 'S'` e preenche `DATA_DEL`, `USUARIO_D` e `USUARIONOME_D`; o registro e a foto permanecem armazenados para auditoria.
 
 **Parâmetros:**
 - `id` (path) - ID da inspeção
 
+**Request Body opcional:**
+```json
+{
+  "usuarioId": 12,
+  "usuario": "João Silva"
+}
+```
+
 **Response 200 OK:**
 ```json
 {
-  "message": "Inspeção deletada com sucesso"
+  "message": "Inspeção excluída logicamente com sucesso"
 }
 ```
 
@@ -282,19 +322,21 @@ Exclui inspeção.
 
 ### 3.5 DELETE `/inspecoes/batch`
 
-Exclui múltiplas inspeções.
+Exclui logicamente múltiplas inspeções.
 
 **Request Body:**
 ```json
 {
-  "ids": [1, 2, 3, 4, 5]
+  "ids": [1, 2, 3, 4, 5],
+  "usuarioId": 12,
+  "usuario": "João Silva"
 }
 ```
 
 **Response 200 OK:**
 ```json
 {
-  "message": "5 inspeção(ões) deletada(s) com sucesso",
+  "message": "5 inspeção(ões) excluída(s) logicamente com sucesso",
   "deletedCount": 5
 }
 ```
@@ -323,7 +365,19 @@ Exporta todas as inspeções como JSON.
     "referenceData": { },
     "inspectionStates": { },
     "linhaProducaoId": 1,
-    "fase": "Fase 1"
+    "fase": "Fase 1",
+    "status": "Rejeitado",
+    "auditoria": {
+      "criadoEm": "2025-11-05T14:32:03.000Z",
+      "criadoPorId": 12,
+      "criadoPorNome": "João Silva",
+      "alteradoEm": null,
+      "alteradoPorId": null,
+      "alteradoPorNome": null,
+      "excluidoEm": null,
+      "excluidoPorId": null,
+      "excluidoPorNome": null
+    }
   }
 ]
 ```
@@ -448,7 +502,9 @@ curl -X POST http://localhost:8000/api/inspecoes \
       "lote": false,
       "validade": true
     },
-    "fase": "Fase 1"
+    "fase": "Fase 1",
+    "usuarioId": 12,
+    "usuario": "João Silva"
   }'
 ```
 
@@ -464,7 +520,12 @@ curl http://localhost:8000/api/produtos/12345
 
 ### Deletar Inspeção
 ```bash
-curl -X DELETE http://localhost:8000/api/inspecoes/1
+curl -X DELETE http://localhost:8000/api/inspecoes/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "usuarioId": 12,
+    "usuario": "João Silva"
+  }'
 ```
 
 ### Exportar JSON

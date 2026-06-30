@@ -15,6 +15,32 @@ npm install axios
 
 **axios** - Cliente HTTP para fazer requisições à API
 
+### 2.1 Ajuste dos Tipos
+
+Adicionar a auditoria ao contrato de `src/types/inspection.ts` para refletir o retorno da API:
+
+```typescript
+export interface AuditData {
+  criadoEm?: string | null
+  criadoPorId?: number | null
+  criadoPorNome?: string | null
+  alteradoEm?: string | null
+  alteradoPorId?: number | null
+  alteradoPorNome?: string | null
+  excluidoEm?: string | null
+  excluidoPorId?: number | null
+  excluidoPorNome?: string | null
+}
+
+export interface InspectionRecord {
+  // ...campos já existentes
+  linhaProducaoId?: number | null
+  fase?: string | null
+  status?: 'Aberto' | 'Aprovado' | 'Rejeitado' | null
+  auditoria?: AuditData
+}
+```
+
 ---
 
 ## 3. Cliente API (HTTP Client)
@@ -150,6 +176,7 @@ export async function createInspection(data: {
   inspectionStates: InspectionStates;
   fase?: string;
   observacoes?: string;
+  usuarioId?: number;
   usuario?: string;
 }): Promise<{ id: number; message: string }> {
   const response = await apiClient.post('/inspecoes', data);
@@ -178,21 +205,27 @@ export async function getInspectionById(id: string): Promise<InspectionRecord> {
 }
 
 /**
- * Exclui inspeção
+ * Exclui logicamente inspeção
  */
-export async function deleteInspection(id: string): Promise<{ message: string }> {
-  const response = await apiClient.delete(`/inspecoes/${id}`);
+export async function deleteInspection(
+  id: string,
+  audit?: { usuarioId?: number; usuario?: string }
+): Promise<{ message: string }> {
+  const response = await apiClient.delete(`/inspecoes/${id}`, {
+    data: audit,
+  });
   return response.data;
 }
 
 /**
- * Exclui múltiplas inspeções
+ * Exclui logicamente múltiplas inspeções
  */
 export async function deleteMultipleInspections(
-  ids: string[]
+  ids: string[],
+  audit?: { usuarioId?: number; usuario?: string }
 ): Promise<{ message: string; deletedCount: number }> {
   const response = await apiClient.delete('/inspecoes/batch', {
-    data: { ids },
+    data: { ids, ...audit },
   });
   return response.data;
 }
@@ -277,6 +310,7 @@ export function useCreateInspection() {
       inspectionStates: InspectionStates;
       fase?: string;
       observacoes?: string;
+      usuarioId?: number;
       usuario?: string;
     }) => createInspection(data),
     onSuccess: () => {
@@ -287,13 +321,17 @@ export function useCreateInspection() {
 }
 
 /**
- * Hook para deletar inspeção
+ * Hook para excluir logicamente inspeção
  */
 export function useDeleteInspection() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => deleteInspection(id),
+    mutationFn: (data: { id: string; usuarioId?: number; usuario?: string }) =>
+      deleteInspection(data.id, {
+        usuarioId: data.usuarioId,
+        usuario: data.usuario,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspecoes'] });
     },
@@ -301,13 +339,17 @@ export function useDeleteInspection() {
 }
 
 /**
- * Hook para deletar múltiplas inspeções
+ * Hook para excluir logicamente múltiplas inspeções
  */
 export function useDeleteMultipleInspections() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (ids: string[]) => deleteMultipleInspections(ids),
+    mutationFn: (data: { ids: string[]; usuarioId?: number; usuario?: string }) =>
+      deleteMultipleInspections(data.ids, {
+        usuarioId: data.usuarioId,
+        usuario: data.usuario,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspecoes'] });
     },
@@ -554,12 +596,19 @@ export default function ConsultaPage() {
 **Funções - SUBSTITUIR:**
 
 ```typescript
-// Exclui um registro
+type AuditUser = { usuarioId?: number; usuario?: string }
+
+const getAuditUser = (): AuditUser => {
+  // Substituir pela origem real de autenticação quando o login estiver implementado.
+  return {}
+}
+
+// Exclui logicamente um registro
 const handleDeleteRecord = async (id: string) => {
   if (confirm('Tem certeza que deseja excluir este registro?')) {
     try {
-      await deleteMutation.mutateAsync(id)
-      toast.success('Registro excluído com sucesso!')
+      await deleteMutation.mutateAsync({ id, ...getAuditUser() })
+      toast.success('Registro excluído logicamente com sucesso!')
       setSelectedRecords(new Set())
     } catch (error) {
       toast.error('Erro ao excluir registro')
@@ -567,7 +616,7 @@ const handleDeleteRecord = async (id: string) => {
   }
 }
 
-// Exclui múltiplos registros
+// Exclui logicamente múltiplos registros
 const handleDeleteSelected = async () => {
   if (selectedRecords.size === 0) {
     toast.error('Selecione ao menos um registro para excluir')
@@ -576,8 +625,11 @@ const handleDeleteSelected = async () => {
 
   if (confirm(`Tem certeza que deseja excluir ${selectedRecords.size} registro(s)?`)) {
     try {
-      await deleteMultipleMutation.mutateAsync(Array.from(selectedRecords))
-      toast.success(`${selectedRecords.size} registro(s) excluído(s) com sucesso!`)
+      await deleteMultipleMutation.mutateAsync({
+        ids: Array.from(selectedRecords),
+        ...getAuditUser(),
+      })
+      toast.success(`${selectedRecords.size} registro(s) excluído(s) logicamente com sucesso!`)
       setSelectedRecords(new Set())
     } catch (error) {
       toast.error('Erro ao excluir registros')
@@ -654,7 +706,7 @@ VITE_API_URL=http://localhost:8000/api
 - [ ] Atualizar `.env`
 - [ ] Testar criação de inspeção
 - [ ] Testar listagem de inspeções
-- [ ] Testar exclusão de inspeções
+- [ ] Testar exclusão lógica de inspeções
 - [ ] Testar busca de produtos
 - [ ] Testar exportação
 

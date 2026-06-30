@@ -186,7 +186,7 @@ LocalStorage (Atual)          →          Firebird + Backend (Futuro)
 - **Firebird** - SGBD relacional open-source
 - **TBOP** - Fonte dos dados de OP, lote, validade, GTIN e ANVISA
 - **TBPRODUTOS** - Cadastro de produtos usado para complementar a referência
-- **TBINSPECAO_MANUAL** - Nova tabela de inspeções manuais deste projeto
+- **TBINSPECAO_MANUAL** - Nova tabela de inspeções manuais deste projeto, com `STATUS`, conformes `Sim`/`Não`, auditoria por registro e exclusão lógica
 - **TBINSPECAO** - Tabela existente fora do escopo; permanece reservada para o projeto SICFAR
 - **Generators/Triggers** - Auto-incremento de IDs
 
@@ -216,7 +216,7 @@ LocalStorage (Atual)          →          Firebird + Backend (Futuro)
 - ✅ Teste cada endpoint com Postman/cURL
 - ✅ Teste criação de inspeção completa
 - ✅ Teste paginação e filtros
-- ✅ Teste exclusão (verifica se foto é deletada)
+- ✅ Teste exclusão lógica (verifica `DELETADO`, `DATA_DEL`, `USUARIO_D` e foto preservada)
 - ✅ Teste em diferentes navegadores
 
 ---

@@ -21,24 +21,19 @@ export interface CameraSupportResult {
   message?: string
 }
 
-const isLocalhost = () => {
-  if (typeof window === 'undefined') return false
+export const getCurrentCameraOrigin = () => {
+  if (typeof window === 'undefined') return ''
 
-  return ['localhost', '127.0.0.1', '[::1]', '::1'].includes(window.location.hostname)
+  return window.location.origin
 }
 
-export const isInsecureCameraContext = () => {
-  if (typeof window === 'undefined') return false
-
-  return window.isSecureContext === false && !isLocalhost()
+export const CAMERA_BROWSER_CONFIG = {
+  chromeFlagsUrl: 'chrome://flags/#unsafely-treat-insecure-origin-as-secure',
+  edgeFlagsUrl: 'edge://flags/#unsafely-treat-insecure-origin-as-secure',
 }
 
 export const getCameraUnsupportedMessage = () => {
-  if (isInsecureCameraContext()) {
-    return 'A câmera só pode ser usada em HTTPS ou localhost. Se você abriu o sistema por http://IP-da-maquina, o navegador bloqueia o Face ID; acesse por HTTPS ou execute o sistema localmente nessa máquina.'
-  }
-
-  return 'Este navegador não oferece suporte ao acesso à câmera. Use uma versão atual do Chrome, Edge ou Firefox.'
+  return 'O navegador não disponibilizou acesso à câmera para este endereço. Em rede local usando IP e porta, libere esta origem nas configurações ou políticas do navegador e tente novamente.'
 }
 
 const installEnumerateDevicesFallback = (mediaDevices: WritableMediaDevices) => {
@@ -72,13 +67,6 @@ export const ensureCameraApiSupport = (): CameraSupportResult => {
 
   const legacyNavigator = navigator as LegacyNavigator
   const currentMediaDevices = navigator.mediaDevices as WritableMediaDevices | undefined
-
-  if (isInsecureCameraContext()) {
-    return {
-      supported: false,
-      message: getCameraUnsupportedMessage(),
-    }
-  }
 
   if (
     typeof currentMediaDevices?.getUserMedia === 'function' &&

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertCircle, ShieldCheck, UserPlus, Users } from 'lucide-react'
 import { useFaceId } from '@/hooks/useFaceId'
 import { useAuth } from '@/hooks/useAuth'
+import { FaceIdCameraAccessHelp } from '@/components/face-id/FaceIdCameraAccessHelp'
 import { FaceIdRecognitionView } from '@/components/face-id/FaceIdRecognitionView'
 import { FaceIdRegisterForm } from '@/components/face-id/FaceIdRegisterForm'
 import { Button } from '@/components/ui/button'
@@ -40,6 +41,7 @@ export function FaceIdModal({ open, onOpenChange }: FaceIdModalProps) {
   const loggingRef = useRef(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isRequestingCamera, setIsRequestingCamera] = useState(false)
+  const cameraSupport = ensureCameraApiSupport()
 
   const requestCameraPermission = useCallback(async () => {
     const support = ensureCameraApiSupport()
@@ -188,6 +190,9 @@ export function FaceIdModal({ open, onOpenChange }: FaceIdModalProps) {
         <AlertCircle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
         <span>{cameraError}</span>
       </div>
+    )}
+    {cameraError && !cameraSupport.supported && (
+      <FaceIdCameraAccessHelp onSupportChange={setCameraError} />
     )}
   </DialogContent>
 </Dialog>
