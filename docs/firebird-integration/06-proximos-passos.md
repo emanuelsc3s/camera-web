@@ -6,7 +6,7 @@
 
 #### 1.1 Validar Estrutura do Banco ✅
 - [ ] Revisar documento `00-mapeamento-sistema-atual.md`
-- [ ] Verificar se `TBOP` e `TBPRODUTOS` já existem e estão populadas no banco atual
+- [ ] Verificar se `TBOP` e `TBPRODUTO` já existem e estão populadas no banco atual
 - [ ] Criar apenas a nova tabela `TBINSPECAO_MANUAL` para inspeções manuais deste projeto
 - [ ] Confirmar que a tabela `TBINSPECAO` existente permanecerá reservada para o projeto SICFAR
 - [ ] Validar `LINHAPRODUCAO_ID`, `FASE`, `STATUS`, conformes `VARCHAR(3)` e campos de auditoria na `TBINSPECAO_MANUAL`

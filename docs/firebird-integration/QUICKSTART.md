@@ -95,7 +95,7 @@ CORS_ORIGIN=http://localhost:8080
 
 ```sql
 -- Script em 02-backend-setup-parte2.md seção 12.1
--- Pré-requisitos: TBOP e TBPRODUTOS já existem no banco.
+-- Pré-requisitos: TBOP e TBPRODUTO já existem no banco.
 -- Não usar a tabela TBINSPECAO existente; ela é reservada ao SICFAR.
 -- Incluir LINHAPRODUCAO_ID, FASE, STATUS, conformes VARCHAR(3) e auditoria por registro.
 CREATE TABLE TBINSPECAO_MANUAL (...);
@@ -204,7 +204,7 @@ Ver detalhes em [05-deployment-options.md](./05-deployment-options.md#3-opção-
 - [ ] Node.js >= 18 instalado
 - [ ] Firebird rodando e acessível
 - [ ] `TBINSPECAO_MANUAL` criada com `LINHAPRODUCAO_ID`, `FASE`, `STATUS`, conformes `VARCHAR(3)` e auditoria
-- [ ] `TBOP` e `TBPRODUTOS` existentes e acessíveis
+- [ ] `TBOP` e `TBPRODUTO` existentes e acessíveis
 - [ ] Dependências instaladas (`npm install`)
 - [ ] `.env` configurado
 - [ ] `server.js` implementado

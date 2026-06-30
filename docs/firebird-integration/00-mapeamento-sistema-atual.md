@@ -103,7 +103,7 @@ O DDL anexado foi gerado pelo IBExpert em **30/06/2026 08:47:13** para o banco `
 - Este projeto persiste apenas inspeções manuais em `TBINSPECAO_MANUAL`.
 - A tabela `TBINSPECAO` já existe no banco atual, mas não será usada por este projeto; ela fica reservada para o registro de inspeções do projeto SICFAR.
 - A tabela `TBINSPECAO_CAM0` também pertence ao fluxo existente do banco e fica fora do escopo da inspeção manual.
-- A tabela de produtos em uso no projeto é `TBPRODUTOS`. O DDL anexado mostra a estrutura equivalente como `TBPRODUTO`; mantenha o nome operacional `TBPRODUTOS`.
+- A tabela de produtos em uso no banco atual é `TBPRODUTO`.
 - Os dados de OP, lote, validade, GTIN e ANVISA aparecem no metadado atual em `TBOP`.
 - O campo `LINHAPRODUCAO_ID` da inspeção manual referencia `TBLINHA_PRODUCAO(LINHAPRODUCAO_ID)`.
 - O campo `STATUS` da inspeção manual segue a estrutura da `TBINSPECAO`: `VARCHAR(10)`.
@@ -113,13 +113,13 @@ O DDL anexado foi gerado pelo IBExpert em **30/06/2026 08:47:13** para o banco `
 
 ### 3.1 Estrutura de Tabelas
 
-#### Tabela: `TBPRODUTOS` (Cadastro de Produtos)
+#### Tabela: `TBPRODUTO` (Cadastro de Produtos)
 **Já deve existir no banco Firebird**
 
 ```sql
 -- Estrutura de referência baseada no cadastro de produto do metadado atual.
--- Não executar se a tabela TBPRODUTOS já existir no banco.
-CREATE TABLE TBPRODUTOS (
+-- Não executar se a tabela TBPRODUTO já existir no banco.
+CREATE TABLE TBPRODUTO (
   PRODUTO_ID        INTEGER NOT NULL PRIMARY KEY,
   ERP_PRODUTO       VARCHAR(10),
   PRODUTO           VARCHAR(80),
@@ -137,8 +137,8 @@ CREATE TABLE TBPRODUTOS (
   DELETADO          CHAR(1)
 );
 
-CREATE INDEX IDX_TBPRODUTOS_ERP_PRODUTO ON TBPRODUTOS(ERP_PRODUTO);
-CREATE INDEX IDX_TBPRODUTOS_DELETADO ON TBPRODUTOS(DELETADO);
+CREATE INDEX IDX_TBPRODUTO_ERP_PRODUTO ON TBPRODUTO(ERP_PRODUTO);
+CREATE INDEX IDX_TBPRODUTO_DELETADO ON TBPRODUTO(DELETADO);
 ```
 
 #### Tabela: `TBOP` (Ordem de Produção)
@@ -171,7 +171,7 @@ CREATE INDEX TBOP_LOTE ON TBOP(LOTE);
 
 ```sql
 CREATE TABLE TBINSPECAO_MANUAL (
-  INSPECAO_MANUAL_ID  INTEGER NOT NULL,
+  INSPECAOMANUAL_ID   INTEGER NOT NULL,
   STATUS              VARCHAR(10),
   OP_ID               INTEGER,
   OP                  VARCHAR(10),
@@ -204,7 +204,7 @@ CREATE TABLE TBINSPECAO_MANUAL (
   USUARIONOME_D       VARCHAR(30),
   DELETADO            CHAR(1) DEFAULT 'N',
 
-  CONSTRAINT PK_TBINSPECAO_MANUAL PRIMARY KEY (INSPECAO_MANUAL_ID),
+  CONSTRAINT PK_TBINSPECAO_MANUAL PRIMARY KEY (INSPECAOMANUAL_ID),
   CONSTRAINT FK_TBINSPMANUAL_OP FOREIGN KEY (OP_ID) REFERENCES TBOP(OP_ID),
   CONSTRAINT FK_TBINSPMANUAL_LINHA FOREIGN KEY (LINHAPRODUCAO_ID) REFERENCES TBLINHA_PRODUCAO(LINHAPRODUCAO_ID),
   CONSTRAINT CK_TBINSPMANUAL_GTIN_CONF CHECK (GTIN_CONFORME IN ('Sim', 'Não') OR GTIN_CONFORME IS NULL),
@@ -214,16 +214,16 @@ CREATE TABLE TBINSPECAO_MANUAL (
 );
 
 -- Generator para auto-incremento
-CREATE GENERATOR GEN_TBINSPECAO_MANUAL_ID;
-SET GENERATOR GEN_TBINSPECAO_MANUAL_ID TO 0;
+CREATE GENERATOR GEN_TBINSPECAOMANUAL_ID;
+SET GENERATOR GEN_TBINSPECAOMANUAL_ID TO 0;
 
 -- Trigger para auto-incremento
 CREATE TRIGGER TRG_TBINSPECAO_MANUAL_BI FOR TBINSPECAO_MANUAL
 ACTIVE BEFORE INSERT POSITION 0
 AS
 BEGIN
-  IF (NEW.INSPECAO_MANUAL_ID IS NULL) THEN
-    NEW.INSPECAO_MANUAL_ID = GEN_ID(GEN_TBINSPECAO_MANUAL_ID, 1);
+  IF (NEW.INSPECAOMANUAL_ID IS NULL) THEN
+    NEW.INSPECAOMANUAL_ID = GEN_ID(GEN_TBINSPECAOMANUAL_ID, 1);
 
   IF (NEW.DATA_INC IS NULL) THEN
     NEW.DATA_INC = CURRENT_TIMESTAMP;
@@ -327,8 +327,8 @@ As fotos atualmente são armazenadas como **Base64** no localStorage. No Firebir
 
 **Opção escolhida: Sistema de Arquivos**
 - Fotos salvas em: `/backend/uploads/fotos/YYYY/MM/DD/`
-- Formato do nome: `{INSPECAO_MANUAL_ID}_{timestamp}.jpg`
-- Caminho salvo no banco: `fotos/YYYY/MM/DD/{INSPECAO_MANUAL_ID}_{timestamp}.jpg`
+- Formato do nome: `{INSPECAOMANUAL_ID}_{timestamp}.jpg`
+- Caminho salvo no banco: `fotos/YYYY/MM/DD/{INSPECAOMANUAL_ID}_{timestamp}.jpg`
 
 **Estrutura de diretórios:**
 ```
@@ -414,7 +414,7 @@ backend/
 **Processamento no backend:**
 1. Decodificar Base64 da foto
 2. Salvar foto no sistema de arquivos
-3. Buscar a OP em `TBOP` e complementar com `TBPRODUTOS` quando necessário
+3. Buscar a OP em `TBOP` e complementar com `TBPRODUTO` quando necessário
 4. Inserir o registro manual em `TBINSPECAO_MANUAL`
 5. Retornar ID da inspeção criada
 
@@ -433,7 +433,7 @@ SELECT FIRST 1
   o.GTIN,
   o.LINHAPRODUCAO_ID
 FROM TBOP o
-LEFT JOIN TBPRODUTOS p ON p.ERP_PRODUTO = o.ERP_PRODUTO
+LEFT JOIN TBPRODUTO p ON p.ERP_PRODUTO = o.ERP_PRODUTO
 WHERE o.OP = ?
   AND COALESCE(o.DELETADO, 'N') = 'N'
 ORDER BY o.DATA_INC DESC;
@@ -446,7 +446,7 @@ INSERT INTO TBINSPECAO_MANUAL (
   USUARIO_ID, USUARIO, DATA_INC, USUARIO_I, USUARIONOME_I
 )
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
-RETURNING INSPECAO_MANUAL_ID;
+RETURNING INSPECAOMANUAL_ID;
 ```
 
 **SQL executado na exclusão lógica:**
@@ -456,7 +456,7 @@ SET DELETADO = 'S',
     DATA_DEL = CURRENT_TIMESTAMP,
     USUARIO_D = ?,
     USUARIONOME_D = ?
-WHERE INSPECAO_MANUAL_ID = ?
+WHERE INSPECAOMANUAL_ID = ?
   AND COALESCE(DELETADO, 'N') = 'N';
 ```
 
@@ -465,7 +465,7 @@ WHERE INSPECAO_MANUAL_ID = ?
 **SQL executado:**
 ```sql
 SELECT
-  i.INSPECAO_MANUAL_ID,
+  i.INSPECAOMANUAL_ID,
   i.DATA,
   i.CAMINHO_FOTO,
   i.GTIN_CONFORME,

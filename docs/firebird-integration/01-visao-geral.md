@@ -143,7 +143,7 @@ Este documento apresenta uma visão geral da arquitetura de integração entre a
 │                                                                  │
 │  ┌────────────────────┐        ┌──────────────────────────┐    │
 │  │       TBOP         │        │    TBINSPECAO_MANUAL     │    │
-│  │  - OP_ID (PK)      │◄───┐   │  - INSPECAO_MANUAL_ID    │    │
+│  │  - OP_ID (PK)      │◄───┐   │  - INSPECAOMANUAL_ID     │    │
 │  │  - OP              │    │   │  - OP_ID (FK opcional) ──┤    │
 │  │  - LOTE            │    └───┤  - DATA                  │    │
 │  │  - VALIDADE        │        │  - CAMINHO_FOTO          │    │
@@ -159,7 +159,7 @@ Este documento apresenta uma visão geral da arquitetura de integração entre a
 │          │ consulta auxiliar                                   │
 │          ↓                                                      │
 │  ┌────────────────────┐                                        │
-│  │    TBPRODUTOS      │                                        │
+│  │    TBPRODUTO       │                                        │
 │  │  - PRODUTO_ID      │                                        │
 │  │  - ERP_PRODUTO     │                                        │
 │  │  - PRODUTO         │                                        │
@@ -219,7 +219,7 @@ Este documento apresenta uma visão geral da arquitetura de integração entre a
      │                │                 │    no disco     │
      │                │                 │                 │
      │                │                 │ 5. SELECT TBOP  │
-     │                │                 │    + TBPRODUTOS │
+     │                │                 │    + TBPRODUTO  │
      │                │                 ├────────────────►│
      │                │                 │                 │
      │                │                 │ 6. Dados da OP  │
@@ -229,7 +229,7 @@ Este documento apresenta uma visão geral da arquitetura de integração entre a
      │                │                 │    TBINSPECAO_MANUAL │
      │                │                 ├────────────────►│
      │                │                 │                 │
-     │                │                 │ 8. INSPECAO_MANUAL_ID │
+     │                │                 │ 8. INSPECAOMANUAL_ID  │
      │                │                 │◄────────────────┤
      │                │                 │                 │
      │                │ 200 OK          │                 │
@@ -356,7 +356,7 @@ Este documento apresenta uma visão geral da arquitetura de integração entre a
 
 ### Banco de Dados
 - **SGBD:** Firebird 3.0+
-- **Tabelas:** TBOP e TBPRODUTOS para referência; TBINSPECAO_MANUAL para gravação deste projeto
+- **Tabelas:** TBOP e TBPRODUTO para referência; TBINSPECAO_MANUAL para gravação deste projeto
 - **Fora do escopo:** TBINSPECAO existente, reservada para o projeto SICFAR
 - **Armazenamento de Fotos:** Sistema de arquivos
 

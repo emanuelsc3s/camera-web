@@ -29,7 +29,7 @@ Verifica a saúde da API.
 
 ### 2.1 GET `/produtos/:op`
 
-Busca dados de referência por OP (Ordem de Produção). A consulta usa `TBOP` como fonte principal e complementa o nome do produto via `TBPRODUTOS` quando necessário.
+Busca dados de referência por OP (Ordem de Produção). A consulta usa `TBOP` como fonte principal e complementa o nome do produto via `TBPRODUTO` quando necessário.
 
 **Parâmetros:**
 - `op` (path) - OP do produto
@@ -58,7 +58,7 @@ Busca dados de referência por OP (Ordem de Produção). A consulta usa `TBOP` c
 
 ### 2.2 GET `/produtos/gtin/:gtin`
 
-Busca dados de referência por código GTIN. A consulta usa `TBOP.GTIN` e complementa o cadastro via `TBPRODUTOS`.
+Busca dados de referência por código GTIN. A consulta usa `TBOP.GTIN` e complementa o cadastro via `TBPRODUTO`.
 
 **Parâmetros:**
 - `gtin` (path) - Código GTIN do produto
@@ -80,7 +80,7 @@ Busca dados de referência por código GTIN. A consulta usa `TBOP.GTIN` e comple
 
 ### 2.3 GET `/produtos`
 
-Lista produtos cadastrados em `TBPRODUTOS` com paginação.
+Lista produtos cadastrados em `TBPRODUTO` com paginação.
 
 **Query Parameters:**
 - `page` (number, opcional) - Número da página (padrão: 1)

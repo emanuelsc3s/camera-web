@@ -322,7 +322,7 @@ const db = require('../config/database');
 /**
  * Busca dados de referência por OP.
  * Os campos OP, lote, validade, GTIN e ANVISA vêm de TBOP.
- * TBPRODUTOS complementa o cadastro do produto via ERP_PRODUTO.
+ * TBPRODUTO complementa o cadastro do produto via ERP_PRODUTO.
  */
 async function getProductByOP(op) {
   const sql = `
@@ -340,7 +340,7 @@ async function getProductByOP(op) {
       o.DOSSIE,
       o.STATUS
     FROM TBOP o
-    LEFT JOIN TBPRODUTOS p ON p.ERP_PRODUTO = o.ERP_PRODUTO
+    LEFT JOIN TBPRODUTO p ON p.ERP_PRODUTO = o.ERP_PRODUTO
     WHERE o.OP = ?
       AND COALESCE(o.DELETADO, 'N') = 'N'
     ORDER BY o.DATA_INC DESC
@@ -369,7 +369,7 @@ async function getProductByOPAndLote(op, lote) {
       o.DOSSIE,
       o.STATUS
     FROM TBOP o
-    LEFT JOIN TBPRODUTOS p ON p.ERP_PRODUTO = o.ERP_PRODUTO
+    LEFT JOIN TBPRODUTO p ON p.ERP_PRODUTO = o.ERP_PRODUTO
     WHERE o.OP = ?
       AND o.LOTE = ?
       AND COALESCE(o.DELETADO, 'N') = 'N'
@@ -399,7 +399,7 @@ async function getProductByGTIN(gtin) {
       o.DOSSIE,
       o.STATUS
     FROM TBOP o
-    LEFT JOIN TBPRODUTOS p ON p.ERP_PRODUTO = o.ERP_PRODUTO
+    LEFT JOIN TBPRODUTO p ON p.ERP_PRODUTO = o.ERP_PRODUTO
     WHERE o.GTIN = ?
       AND COALESCE(o.DELETADO, 'N') = 'N'
     ORDER BY o.DATA_INC DESC
@@ -438,7 +438,7 @@ async function resolveReferenceData(referenceData) {
 }
 
 /**
- * Lista produtos cadastrados em TBPRODUTOS.
+ * Lista produtos cadastrados em TBPRODUTO.
  */
 async function getAllProducts(page = 1, limit = 50) {
   const start = (page - 1) * limit + 1;
@@ -452,7 +452,7 @@ async function getAllProducts(page = 1, limit = 50) {
       MENSAGEM,
       DATA_INC,
       DELETADO
-    FROM TBPRODUTOS
+    FROM TBPRODUTO
     WHERE COALESCE(DELETADO, 'N') = 'N'
     ORDER BY PRODUTO
     ROWS ? TO ?
@@ -609,7 +609,7 @@ async function createInspection(data) {
         USUARIONOME_I
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
-      RETURNING INSPECAO_MANUAL_ID
+      RETURNING INSPECAOMANUAL_ID
     `;
 
     const conformeToText = (value) => (value === true ? 'Sim' : value === false ? 'Não' : null);
@@ -643,7 +643,7 @@ async function createInspection(data) {
       usuario || null,
     ]);
 
-    const idInspecao = inspectionResult[0].INSPECAO_MANUAL_ID;
+    const idInspecao = inspectionResult[0].INSPECAOMANUAL_ID;
 
     // 3. Salvar foto com ID da inspeção
     const photoPath = await fotosService.savePhotoFromBase64(fotoBase64, idInspecao);
@@ -653,7 +653,7 @@ async function createInspection(data) {
     const sqlUpdatePhoto = `
       UPDATE TBINSPECAO_MANUAL
       SET CAMINHO_FOTO = ?
-      WHERE INSPECAO_MANUAL_ID = ?
+      WHERE INSPECAOMANUAL_ID = ?
     `;
 
     await db.query(sqlUpdatePhoto, [photoPath, idInspecao]);
@@ -722,7 +722,7 @@ async function getInspections(filters = {}) {
 
   const sql = `
     SELECT
-      i.INSPECAO_MANUAL_ID,
+      i.INSPECAOMANUAL_ID,
       i.DATA,
       i.CAMINHO_FOTO,
       i.GTIN_CONFORME,
@@ -785,7 +785,7 @@ async function getInspections(filters = {}) {
 async function getInspectionById(id) {
   const sql = `
     SELECT
-      i.INSPECAO_MANUAL_ID,
+      i.INSPECAOMANUAL_ID,
       i.DATA,
       i.CAMINHO_FOTO,
       i.GTIN_CONFORME,
@@ -813,7 +813,7 @@ async function getInspectionById(id) {
       i.USUARIO_D,
       i.USUARIONOME_D
     FROM TBINSPECAO_MANUAL i
-    WHERE i.INSPECAO_MANUAL_ID = ?
+    WHERE i.INSPECAOMANUAL_ID = ?
       AND COALESCE(i.DELETADO, 'N') = 'N'
   `;
 
@@ -841,7 +841,7 @@ async function deleteInspection(id, audit = {}) {
         DATA_DEL = CURRENT_TIMESTAMP,
         USUARIO_D = ?,
         USUARIONOME_D = ?
-    WHERE INSPECAO_MANUAL_ID = ?
+    WHERE INSPECAOMANUAL_ID = ?
       AND COALESCE(DELETADO, 'N') = 'N'
   `;
 
@@ -878,7 +878,7 @@ function formatInspectionRecord(record) {
   const textToConforme = (value) => (value === 'Sim' ? true : value === 'Não' ? false : null);
 
   return {
-    id: String(record.INSPECAO_MANUAL_ID),
+    id: String(record.INSPECAOMANUAL_ID),
     timestamp: new Date(record.DATA).getTime(),
     dataHora: formatDateTime(new Date(record.DATA)),
     foto: `/api/fotos/${record.CAMINHO_FOTO}`,
