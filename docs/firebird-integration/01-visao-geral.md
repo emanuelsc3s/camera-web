@@ -17,7 +17,7 @@ Este documento apresenta uma visão geral da arquitetura de integração entre a
 
 ### Documentação Face ID (Sistema de Reconhecimento Facial)
 - **[07-face-id-backend-api.md](./07-face-id-backend-api.md)** - API REST para reconhecimento facial (8 endpoints)
-- **[08-face-id-database-schema.md](./08-face-id-database-schema.md)** - Modelagem completa do banco de dados (TBUSUARIO_FACEID, TBFACEID_TENTATIVA)
+- **[08-face-id-database-schema.md](./08-face-id-database-schema.md)** - Modelagem completa do banco de dados (TBUSUARIO_FACEID, TBACESSO para auditoria)
 - **[09-face-id-backend-implementation.md](./09-face-id-backend-implementation.md)** - Implementação completa do backend (services, controllers, utils)
 - **[10-face-id-security-flows.md](./10-face-id-security-flows.md)** - Fluxos de segurança, LGPD e boas práticas
 

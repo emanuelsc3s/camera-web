@@ -27,7 +27,7 @@ backend/
 └── server.js                        # Atualizar
 ```
 
-**Nota:** Não é necessário criar diretório `uploads/face-id/photos/` pois as fotos serão armazenadas diretamente no banco de dados como BLOB.
+**Nota:** Não criar diretório de fotos do Face ID. As fotos não são persistidas; o frontend usa a imagem apenas em memória para gerar o descriptor facial.
 
 ---
 
@@ -176,7 +176,7 @@ const vectorMath = require('../utils/vectorMath')
  * @returns {Promise<Object>} Dados do Face ID criado
  */
 async function registerFaceId(data) {
-  const { usuarioId, name, matricula, email, photoBase64, descriptor } = data
+  const { usuarioId, name, matricula, email, descriptor } = data
 
   // Validar descriptor
   if (!vectorMath.isValidDescriptor(descriptor)) {
@@ -193,10 +193,6 @@ async function registerFaceId(data) {
 
   // Converter descriptor para buffer
   const descriptorBuffer = vectorMath.descriptorToBuffer(descriptor)
-
-  // Converter foto Base64 para Buffer
-  const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, '')
-  const photoBuffer = Buffer.from(base64Data, 'base64')
 
   try {
     // 1. Criar ou buscar usuário na TBUSUARIO (se necessário)
@@ -217,25 +213,23 @@ async function registerFaceId(data) {
       }
     }
 
-    // 2. Inserir Face ID com descriptor e foto
+    // 2. Inserir Face ID somente com descriptor
     const sqlInsert = `
       INSERT INTO TBUSUARIO_FACEID (
         USUARIO_ID,
         DESCRIPTOR_FACIAL,
-        FOTO_URL,
         MATRICULA,
         ATIVO,
         USUARIO_I,
         USUARIONOME_I
       )
-      VALUES (?, ?, ?, ?, 'S', ?, ?)
+      VALUES (?, ?, ?, 'S', ?, ?)
       RETURNING FACEID_ID
     `
 
     const result = await db.query(sqlInsert, [
       finalUsuarioId || null,
       descriptorBuffer,
-      photoBuffer,  // BLOB da foto
       matricula || null,
       finalUsuarioId || null,
       name
@@ -249,7 +243,7 @@ async function registerFaceId(data) {
       usuarioId: finalUsuarioId,
       name,
       matricula,
-      photoStored: true,  // Indica que a foto foi armazenada no banco
+      descriptorOnly: true,
       createdAt: new Date().toISOString()
     }
   } catch (error) {
@@ -272,7 +266,7 @@ async function authenticateFaceId(data) {
   }
 
   try {
-    // 1. Buscar todos os descritores ativos (sem foto para performance)
+    // 1. Buscar todos os descritores ativos
     const sqlGetAll = `
       SELECT
         f.FACEID_ID,
@@ -323,20 +317,6 @@ async function authenticateFaceId(data) {
 
     // 5. Retornar resultado
     if (bestMatch?.isMatch) {
-      // Buscar foto do usuário autenticado
-      let photoBase64 = null
-      if (bestMatch.faceIdId) {
-        const photoResult = await db.query(`
-          SELECT FOTO_URL
-          FROM TBUSUARIO_FACEID
-          WHERE FACEID_ID = ?
-        `, [bestMatch.faceIdId])
-
-        if (photoResult && photoResult[0] && photoResult[0].FOTO_URL) {
-          photoBase64 = `data:image/jpeg;base64,${photoResult[0].FOTO_URL.toString('base64')}`
-        }
-      }
-
       return {
         authenticated: true,
         data: {
@@ -345,7 +325,6 @@ async function authenticateFaceId(data) {
           name: bestMatch.name,
           matricula: bestMatch.matricula,
           email: bestMatch.email,
-          photoBase64: photoBase64,  // Foto em Base64
           distance: bestMatch.distance,
           confidence: bestMatch.confidence
         }
@@ -504,7 +483,6 @@ async function listFaceIdUsers(filters = {}) {
     params.push(`%${search}%`, `%${search}%`)
   }
 
-  // Não incluir FOTO_URL em listagens (muito pesado)
   const sql = `
     SELECT
       f.FACEID_ID,
@@ -550,17 +528,13 @@ async function listFaceIdUsers(filters = {}) {
 /**
  * Busca Face ID por ID
  * @param {number} faceIdId - ID do Face ID
- * @param {boolean} includePhoto - Se deve incluir a foto (padrão: false)
  * @returns {Promise<Object|null>} Dados do Face ID
  */
-async function getFaceIdById(faceIdId, includePhoto = false) {
-  const photoField = includePhoto ? 'f.FOTO_URL,' : ''
-
+async function getFaceIdById(faceIdId) {
   const sql = `
     SELECT
       f.FACEID_ID,
       f.USUARIO_ID,
-      ${photoField}
       f.MATRICULA,
       f.ATIVO,
       f.DATA_INC,
@@ -584,14 +558,7 @@ async function getFaceIdById(faceIdId, includePhoto = false) {
 
   if (result.length === 0) return null
 
-  const user = formatFaceIdUser(result[0])
-
-  // Converter foto para Base64 se solicitado
-  if (includePhoto && result[0].FOTO_URL) {
-    user.photoBase64 = `data:image/jpeg;base64,${result[0].FOTO_URL.toString('base64')}`
-  }
-
-  return user
+  return formatFaceIdUser(result[0])
 }
 
 /**
@@ -600,7 +567,7 @@ async function getFaceIdById(faceIdId, includePhoto = false) {
  * @param {Object} data - Novos dados
  */
 async function updateFaceId(faceIdId, data) {
-  const { photoBase64, descriptor, usuarioId, usuarioNome } = data
+  const { descriptor, usuarioId, usuarioNome } = data
 
   if (!vectorMath.isValidDescriptor(descriptor)) {
     throw new Error('Descriptor facial inválido')
@@ -608,22 +575,17 @@ async function updateFaceId(faceIdId, data) {
 
   const descriptorBuffer = vectorMath.descriptorToBuffer(descriptor)
 
-  // Converter foto Base64 para Buffer
-  const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, '')
-  const photoBuffer = Buffer.from(base64Data, 'base64')
-
   // Atualizar registro
   const sql = `
     UPDATE TBUSUARIO_FACEID
     SET
       DESCRIPTOR_FACIAL = ?,
-      FOTO_URL = ?,
       USUARIO_A = ?,
       USUARIONOME_A = ?
     WHERE FACEID_ID = ?
   `
 
-  await db.query(sql, [descriptorBuffer, photoBuffer, usuarioId, usuarioNome, faceIdId])
+  await db.query(sql, [descriptorBuffer, usuarioId, usuarioNome, faceIdId])
 
   return { faceIdId, updatedAt: new Date().toISOString() }
 }
@@ -718,7 +680,7 @@ function formatFaceIdUser(record) {
     name: record.NOME,
     matricula: record.MATRICULA,
     email: record.EMAIL,
-    hasPhoto: !!record.FOTO_URL,  // Indica se tem foto armazenada
+    descriptorOnly: true,
     createdAt: record.DATA_INC,
     updatedAt: record.DATA_ALT,
     ativo: record.ATIVO === 'S',
@@ -749,34 +711,11 @@ function formatAccessRecord(record) {
   }
 }
 
-/**
- * Busca apenas a foto de um Face ID
- * @param {number} faceIdId - ID do Face ID
- * @returns {Promise<Buffer|null>} Buffer da foto ou null
- */
-async function getFaceIdPhoto(faceIdId) {
-  const sql = `
-    SELECT FOTO_URL
-    FROM TBUSUARIO_FACEID
-    WHERE FACEID_ID = ?
-      AND ATIVO = 'S'
-  `
-
-  const result = await db.query(sql, [faceIdId])
-
-  if (result.length === 0 || !result[0].FOTO_URL) {
-    return null
-  }
-
-  return result[0].FOTO_URL  // Retorna o Buffer diretamente
-}
-
 module.exports = {
   registerFaceId,
   authenticateFaceId,
   listFaceIdUsers,
   getFaceIdById,
-  getFaceIdPhoto,
   updateFaceId,
   deleteFaceId,
   getAccessHistory

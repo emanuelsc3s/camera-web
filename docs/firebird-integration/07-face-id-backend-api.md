@@ -26,7 +26,7 @@ Este documento especifica os endpoints da API REST necessários para suportar o 
 │  │  faceIdStorageService.ts                         │ │
 │  │  - Salva/busca usuários no IndexedDB             │ │
 │  │  - Armazena: id, name, matricula, descriptors,  │ │
-│  │    photoUrl, timestamps                          │ │
+│  │    descriptorOnly, timestamps                    │ │
 │  └──────────────────────────────────────────────────┘ │
 │                      ↓↑                                 │
 │  ┌──────────────────────────────────────────────────┐ │
@@ -74,7 +74,7 @@ Este documento especifica os endpoints da API REST necessários para suportar o 
 │  │  faceId.service.js                               │ │
 │  │  - Validação de descritores faciais              │ │
 │  │  - Matching de vetores (similaridade)            │ │
-│  │  - Gerenciamento de fotos                        │ │
+│  │  - Cadastro e matching por descriptor            │ │
 │  │  - Auditoria via TBACESSO                        │ │
 │  └──────────────────────────────────────────────────┘ │
 │                      ↓                                  │
@@ -96,7 +96,7 @@ Este documento especifica os endpoints da API REST necessários para suportar o 
 │  │  TBUSUARIO_FACEID (nova)                         │ │
 │  │  - FACEID_ID, USUARIO_ID (FK)                    │ │
 │  │  - DESCRIPTOR_FACIAL (BLOB)                      │ │
-│  │  - FOTO_URL, MATRICULA                           │ │
+│  │  - MATRICULA, ATIVO                              │ │
 │  │  - Campos de auditoria                           │ │
 │  └──────────────────────────────────────────────────┘ │
 │                                                         │
@@ -133,7 +133,6 @@ Registra um novo usuário com biometria facial.
   "usuarioId": 123,
   "name": "João Silva",
   "matricula": "MAT001",
-  "photoBase64": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
   "descriptor": [0.123, -0.456, 0.789, ...],  // Array com 128 números (Float32Array convertido)
   "email": "joao.silva@empresa.com"
 }
@@ -143,9 +142,10 @@ Registra um novo usuário com biometria facial.
 - `usuarioId` (number, opcional) - ID do usuário na tabela TBUSUARIO (se já existir)
 - `name` (string, obrigatório) - Nome completo do usuário
 - `matricula` (string, opcional) - Matrícula do funcionário
-- `photoBase64` (string, obrigatório) - Foto do rosto em Base64
 - `descriptor` (number[], obrigatório) - Vetor de 128 dimensões do descritor facial
 - `email` (string, opcional) - E-mail do usuário
+
+Observação: a foto capturada pela câmera não é enviada ao backend nem persistida. O frontend usa a imagem apenas em memória para gerar o `descriptor`.
 
 **Response 201 Created:**
 ```json
@@ -157,7 +157,6 @@ Registra um novo usuário com biometria facial.
     "usuarioId": 123,
     "name": "João Silva",
     "matricula": "MAT001",
-    "photoUrl": "/api/face-id/photos/2025/11/22/1_1732291234567.jpg",
     "createdAt": "2025-11-22T10:30:00.000Z"
   }
 }
@@ -170,8 +169,7 @@ Registra um novo usuário com biometria facial.
   "error": "Dados inválidos",
   "details": [
     "Campo 'name' é obrigatório",
-    "Descriptor deve ter exatamente 128 dimensões",
-    "Foto em Base64 é obrigatória"
+    "Descriptor deve ter exatamente 128 dimensões"
   ]
 }
 ```
@@ -216,7 +214,6 @@ Autentica usuário através de reconhecimento facial.
     "name": "João Silva",
     "matricula": "MAT001",
     "email": "joao.silva@empresa.com",
-    "photoUrl": "/api/face-id/photos/2025/11/22/1_1732291234567.jpg",
     "distance": 0.42,
     "confidence": 0.58
   },
@@ -286,7 +283,6 @@ Lista todos os usuários cadastrados com Face ID.
       "name": "João Silva",
       "matricula": "MAT001",
       "email": "joao.silva@empresa.com",
-      "photoUrl": "/api/face-id/photos/2025/11/22/1_1732291234567.jpg",
       "createdAt": "2025-11-22T10:30:00.000Z",
       "updatedAt": "2025-11-22T10:30:00.000Z",
       "ativo": true
@@ -322,7 +318,6 @@ Busca dados de um usuário específico com Face ID.
     "name": "João Silva",
     "matricula": "MAT001",
     "email": "joao.silva@empresa.com",
-    "photoUrl": "/api/face-id/photos/2025/11/22/1_1732291234567.jpg",
     "createdAt": "2025-11-22T10:30:00.000Z",
     "updatedAt": "2025-11-22T10:30:00.000Z",
     "ativo": true,
@@ -351,7 +346,6 @@ Atualiza dados do Face ID de um usuário (re-cadastro de biometria).
 **Request Body:**
 ```json
 {
-  "photoBase64": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
   "descriptor": [0.123, -0.456, 0.789, ...]
 }
 ```
@@ -426,31 +420,6 @@ Lista histórico de acessos (autenticações) de um usuário via Face ID usando 
     "limit": 20,
     "totalPages": 8
   }
-}
-```
-
----
-
-## 8. Servir Foto de Face ID
-
-### GET `/face-id/photos/:year/:month/:day/:filename`
-
-Serve arquivo de foto do Face ID.
-
-**Exemplo:**
-```
-GET /api/face-id/photos/2025/11/22/1_1732291234567.jpg
-```
-
-**Response 200 OK:**
-- Retorna o arquivo de imagem (JPEG)
-- Content-Type: `image/jpeg`
-
-**Response 404 Not Found:**
-```json
-{
-  "success": false,
-  "error": "Foto não encontrada"
 }
 ```
 
@@ -533,11 +502,10 @@ function isMatch(distance, threshold = 0.6) {
 - Valores devem ser números válidos (não NaN, não Infinity)
 - Tamanho do BLOB: ~512 bytes (128 floats × 4 bytes)
 
-**Foto:**
-- Formato: JPEG, PNG
-- Tamanho máximo: 2MB
-- Resolução mínima: 320x240
-- Deve conter exatamente 1 rosto detectável
+**Captura no frontend:**
+- A imagem da câmera deve conter exatamente 1 rosto detectável
+- A imagem não deve ser enviada ao backend
+- O frontend deve descartar o frame após gerar o descriptor
 
 ---
 
@@ -569,7 +537,6 @@ const response = await fetch('/api/face-id/register', {
     name: 'João Silva',
     matricula: 'MAT001',
     email: 'joao.silva@empresa.com',
-    photoBase64: photoDataUrl,
     descriptor: Array.from(faceDescriptor)
   })
 })

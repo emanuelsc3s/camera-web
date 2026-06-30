@@ -24,7 +24,7 @@ Este documento define a estrutura de banco de dados necessária para suportar o 
 │  - FACEID_ID (PK)                                           │
 │  - USUARIO_ID (FK) → TBUSUARIO                              │
 │  - DESCRIPTOR_FACIAL (BLOB) ← Vetor de 128 floats          │
-│  - FOTO_URL (BLOB) ← Imagem JPEG/PNG do rosto              │
+│  - Foto não persistida; usada só em memória no cadastro    │
 │  - MATRICULA (VARCHAR)                                      │
 │  - ATIVO (CHAR(1))                                          │
 │  - Campos de auditoria padrão                               │
@@ -51,7 +51,7 @@ Este documento define a estrutura de banco de dados necessária para suportar o 
 
 ## 1. Tabela TBUSUARIO_FACEID
 
-Armazena os dados biométricos faciais dos usuários e suas fotos de referência.
+Armazena somente o template biométrico facial dos usuários. A foto capturada pela câmera é usada apenas em memória para gerar o descriptor e deve ser descartada após o cadastro/autenticação.
 
 ### 1.1 Estrutura DDL
 
@@ -62,11 +62,7 @@ CREATE TABLE TBUSUARIO_FACEID (
 
     -- Descriptor facial: vetor de 128 floats (512 bytes)
     -- Usado para reconhecimento e matching facial
-    DESCRIPTOR_FACIAL   BLOB SUB_TYPE BINARY SEGMENT SIZE 512,
-
-    -- Foto do rosto: imagem JPEG/PNG (50-200 KB típico)
-    -- Armazenada diretamente no banco de dados
-    FOTO_URL            BLOB SUB_TYPE BINARY SEGMENT SIZE 8192,
+    DESCRIPTOR_FACIAL   BLOB SUB_TYPE BINARY SEGMENT SIZE 512 NOT NULL,
 
     MATRICULA           VARCHAR(30),
     ATIVO               CHAR(1) DEFAULT 'S',
@@ -84,7 +80,7 @@ CREATE TABLE TBUSUARIO_FACEID (
 
     CONSTRAINT PK_TBUSUARIO_FACEID PRIMARY KEY (FACEID_ID),
     CONSTRAINT FK_TBUSUARIO_FACEID FOREIGN KEY (USUARIO_ID)
-        REFERENCES TBUSUARIO(USUARIO_ID) ON DELETE CASCADE,
+        REFERENCES TBUSUARIO(USUARIO_ID),
     CONSTRAINT CHK_TBUSUARIO_FACEID_ATIVO CHECK (ATIVO IN ('S', 'N'))
 );
 ```
@@ -141,7 +137,6 @@ CREATE INDEX IDX_FACEID_USUARIO_ATIVO ON TBUSUARIO_FACEID(USUARIO_ID, ATIVO);
 | FACEID_ID | INTEGER | 4 bytes | NÃO | Chave primária (auto-incremento) |
 | USUARIO_ID | INTEGER | 4 bytes | SIM | FK para TBUSUARIO (pode ser NULL para cadastros sem vínculo) |
 | DESCRIPTOR_FACIAL | BLOB | 512 bytes | NÃO | Vetor de 128 floats (128 × 4 bytes) representando o descritor facial |
-| FOTO_URL | BLOB | 50-200 KB | SIM | Imagem JPEG/PNG do rosto armazenada diretamente no banco |
 | MATRICULA | VARCHAR(30) | 30 chars | SIM | Matrícula do funcionário (pode ser usada para login) |
 | ATIVO | CHAR(1) | 1 char | NÃO | 'S' = ativo, 'N' = inativo (soft delete) |
 | DATA_INC | TIMESTAMP | 8 bytes | NÃO | Data/hora de criação do registro |
@@ -163,24 +158,12 @@ CREATE INDEX IDX_FACEID_USUARIO_ATIVO ON TBUSUARIO_FACEID(USUARIO_ID, ATIVO);
 - Usado para reconhecimento e matching facial (cálculo de distância euclidiana)
 - Formato: Buffer binário de Float32Array
 
-**FOTO_URL (BLOB SUB_TYPE BINARY SEGMENT SIZE 8192):**
-- Armazena a **imagem completa** do rosto em formato JPEG ou PNG
-- Tamanho típico: 50-200 KB (dependendo da qualidade e resolução)
-- SEGMENT SIZE 8192 (8 KB): Otimizado para imagens (reduz fragmentação)
-- Usado para **referência visual** e auditoria
-- Pode ser exibida na interface do usuário
-- **Opcional**: Pode ser NULL se não quiser armazenar a foto
-
-**Vantagens de armazenar foto no banco:**
-- ✅ Backup centralizado (tudo no banco de dados)
-- ✅ Não precisa gerenciar arquivos no sistema de arquivos
-- ✅ Transações ACID (foto e descriptor sempre consistentes)
-- ✅ Mais simples para deploy e migração
-
-**Desvantagens:**
-- ⚠️ Banco de dados cresce mais (100 KB por usuário em média)
-- ⚠️ Backup do banco fica maior
-- ⚠️ Pode impactar performance em sistemas com muitos usuários
+**Política de foto:**
+- A foto capturada pela webcam não é persistida.
+- O frontend extrai o descriptor facial com face-api.js e envia apenas o vetor de 128 números ao backend.
+- O backend grava somente `DESCRIPTOR_FACIAL`, `MATRICULA`, vínculo com usuário e auditoria.
+- A rastreabilidade fica em `TBACESSO` com usuário, terminal/IP, data/hora, resultado, distância e confiança.
+- Se houver exigência futura de auditoria visual, criar uma decisão separada e explícita, porque foto de rosto aumenta muito o risco de exposição de dado biométrico sensível.
 
 **Por que SEGMENT SIZE 512 para DESCRIPTOR_FACIAL?**
 - Tamanho exato do descriptor: 512 bytes
@@ -188,16 +171,8 @@ CREATE INDEX IDX_FACEID_USUARIO_ATIVO ON TBUSUARIO_FACEID(USUARIO_ID, ATIVO);
 - Com SEGMENT SIZE 80 (padrão): **7 segmentos** (fragmentado)
 - Menos segmentos = melhor performance de leitura/escrita
 
-**Por que SEGMENT SIZE 8192 para FOTO_URL?**
-- Tamanho típico da foto: 50-200 KB
-- SEGMENT SIZE 8192 (8 KB): **7-25 segmentos** para foto típica
-- Tamanho comum para BLOBs de imagem (balanceamento entre fragmentação e overhead)
-- Foto de 100 KB = ~13 segmentos de 8 KB (razoável)
-- Se usar 512 bytes: ~200 segmentos (muito fragmentado)
-- Se usar 32 KB: ~3-7 segmentos (também bom, mas 8 KB é mais comum)
-
 **Limitações do Firebird 2.5:**
-- Tamanho máximo de BLOB: 2GB (mais que suficiente para fotos)
+- Tamanho máximo de BLOB: 2GB
 - Não possui tipo ARRAY nativo (por isso usamos BLOB para o descriptor)
 - SEGMENT SIZE máximo: 32.767 bytes
 
@@ -423,7 +398,8 @@ Para cadastro:
   "evento": "cadastro_facial",
   "faceIdId": 456,
   "matricula": "MAT001",
-  "fotoUrl": "2025/11/22/456_1732291234567.jpg"
+  "fotoArmazenada": false,
+  "armazenamento": "descriptor_only"
 }
 ```
 
@@ -492,11 +468,10 @@ VALUES (
 ### 3.1 Cadastrar Novo Face ID
 
 ```sql
--- Inserir novo Face ID com descriptor e foto
+-- Inserir novo Face ID somente com descriptor
 INSERT INTO TBUSUARIO_FACEID (
     USUARIO_ID,
     DESCRIPTOR_FACIAL,
-    FOTO_URL,
     MATRICULA,
     ATIVO,
     USUARIO_I,
@@ -505,7 +480,6 @@ INSERT INTO TBUSUARIO_FACEID (
 VALUES (
     :USUARIO_ID,
     :DESCRIPTOR_BLOB,      -- BLOB: Buffer de 512 bytes (128 floats)
-    :FOTO_BLOB,            -- BLOB: Imagem JPEG/PNG (50-200 KB)
     :MATRICULA,
     'S',
     :USUARIO_LOGADO_ID,
@@ -519,46 +493,29 @@ RETURNING FACEID_ID;
 // Converter descriptor Float32Array para Buffer
 const descriptorBuffer = Buffer.from(descriptor.buffer) // 512 bytes
 
-// Converter foto Base64 para Buffer
-const fotoBase64 = photoDataUrl.replace(/^data:image\/\w+;base64,/, '')
-const fotoBuffer = Buffer.from(fotoBase64, 'base64') // 50-200 KB
-
 // Inserir no banco
 await db.query(`
   INSERT INTO TBUSUARIO_FACEID (
-    USUARIO_ID, DESCRIPTOR_FACIAL, FOTO_URL, MATRICULA, ATIVO
-  ) VALUES (?, ?, ?, ?, 'S')
-`, [usuarioId, descriptorBuffer, fotoBuffer, matricula])
+    USUARIO_ID, DESCRIPTOR_FACIAL, MATRICULA, ATIVO
+  ) VALUES (?, ?, ?, 'S')
+`, [usuarioId, descriptorBuffer, matricula])
 ```
 
 ### 3.2 Buscar Todos os Descritores Ativos
 
 ```sql
 -- Buscar todos os descritores para matching
--- NOTA: FOTO_URL agora é BLOB, não retornar em listagens (muito pesado)
 SELECT
     f.FACEID_ID,
     f.USUARIO_ID,
     f.DESCRIPTOR_FACIAL,
     f.MATRICULA,
-    -- f.FOTO_URL,  -- Não incluir BLOB de foto em listagens
     u.NOME,
     u.EMAIL
 FROM TBUSUARIO_FACEID f
 LEFT JOIN TBUSUARIO u ON u.USUARIO_ID = f.USUARIO_ID
 WHERE f.ATIVO = 'S'
 ORDER BY f.DATA_INC DESC;
-```
-
-**Buscar foto específica de um usuário:**
-```sql
--- Buscar apenas a foto de um usuário específico
-SELECT
-    FACEID_ID,
-    FOTO_URL
-FROM TBUSUARIO_FACEID
-WHERE FACEID_ID = :FACEID_ID
-  AND ATIVO = 'S';
 ```
 
 ### 3.3 Registrar Tentativa de Autenticação
@@ -744,7 +701,7 @@ VALUES (
     :USUARIO_NOME,
     'WEB_FACE_ID',
     'FACE_ID_REGISTER',
-    '{"evento":"cadastro_facial","faceIdId":' || :FACEID_ID || ',"matricula":"' || :MATRICULA || '","fotoArmazenada":true}',
+    '{"evento":"cadastro_facial","faceIdId":' || :FACEID_ID || ',"matricula":"' || :MATRICULA || '","fotoArmazenada":false,"armazenamento":"descriptor_only"}',
     'S',
     :IP,
     :USER_AGENT,
@@ -754,108 +711,70 @@ VALUES (
 
 ---
 
-## 4. Armazenamento de Fotos no Banco de Dados
+## 4. Política de Foto e Descriptor
 
 ### 4.1 Visão Geral
 
-As fotos dos rostos são armazenadas **diretamente no banco de dados** como BLOB no campo `FOTO_URL` da tabela `TBUSUARIO_FACEID`.
+As fotos dos rostos **não são persistidas**. A imagem capturada pela câmera existe apenas no navegador, pelo tempo necessário para o face-api.js detectar o rosto e gerar o `DESCRIPTOR_FACIAL`.
 
 **Vantagens:**
-- ✅ Backup centralizado (tudo no banco)
-- ✅ Não precisa gerenciar arquivos no sistema de arquivos
-- ✅ Transações ACID (foto e descriptor sempre consistentes)
-- ✅ Mais simples para deploy e migração
-- ✅ Não há risco de perder fotos por exclusão acidental de arquivos
+- ✅ Banco muito menor: grava apenas ~512 bytes do descriptor por usuário
+- ✅ Melhor performance de backup, restore e listagens
+- ✅ Menor exposição de dado biométrico sensível
+- ✅ Nenhum gerenciamento de arquivos por terminal
+- ✅ Login funciona nos 10 terminais desde que todos usem o mesmo Firebird central
 
 **Desvantagens:**
-- ⚠️ Banco de dados cresce mais (~100 KB por usuário)
-- ⚠️ Backup do banco fica maior
-- ⚠️ Pode impactar performance em sistemas com muitos usuários
+- ⚠️ Não há foto cadastrada para conferência visual posterior
+- ⚠️ Re-cadastro depende de nova captura presencial
+- ⚠️ A auditoria deve se apoiar em `TBACESSO`, usuário, matrícula, terminal/IP, distância e confiança
 
-### 4.2 Especificações da Foto
+### 4.2 Regras de Captura
 
 | Propriedade | Valor |
 |-------------|-------|
-| Formato | JPEG ou PNG |
-| Tamanho máximo | 500 KB (recomendado) |
-| Tamanho típico | 50-200 KB |
-| Resolução mínima | 320x240 pixels |
-| Resolução recomendada | 640x480 pixels |
-| Qualidade JPEG | 80-85% |
+| Persistência da foto | Não persistir |
+| Envio da foto ao backend | Não enviar |
+| Valor gravado no banco | Apenas `DESCRIPTOR_FACIAL` |
+| Descriptor | 128 floats, 512 bytes em BLOB |
 | Faces detectáveis | Exatamente 1 |
 
-### 4.3 Conversão e Armazenamento
+### 4.3 Fluxo de Cadastro
 
 **No Frontend (React):**
 ```javascript
-// Capturar frame do vídeo
-const canvas = document.createElement('canvas')
-canvas.width = video.videoWidth
-canvas.height = video.videoHeight
-canvas.getContext('2d').drawImage(video, 0, 0)
+// Capturar frame, detectar rosto e extrair descriptor em memória.
+const detection = await faceapi
+  .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+  .withFaceLandmarks()
+  .withFaceDescriptor()
 
-// Converter para Base64
-const photoBase64 = canvas.toDataURL('image/jpeg', 0.8)
-// "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAA..."
+if (!detection) {
+  throw new Error('Nenhum rosto detectado')
+}
 
-// Enviar ao backend
+// Enviar somente o descriptor e os dados de vínculo.
 await api.post('/face-id/register', {
-  descriptor: Array.from(descriptor),
-  photoBase64: photoBase64,
+  descriptor: Array.from(detection.descriptor),
   matricula: matricula
 })
+
+// Nenhuma imagem é gravada em localStorage, IndexedDB, arquivo ou banco.
 ```
 
 **No Backend (Node.js):**
 ```javascript
-// Remover prefixo do Base64
-const base64Data = photoBase64.replace(/^data:image\/\w+;base64,/, '')
+const descriptorBuffer = vectorMath.descriptorToBuffer(descriptor)
 
-// Converter para Buffer
-const photoBuffer = Buffer.from(base64Data, 'base64')
-
-// Salvar no banco
 await db.query(`
-  INSERT INTO TBUSUARIO_FACEID (DESCRIPTOR_FACIAL, FOTO_URL, MATRICULA)
-  VALUES (?, ?, ?)
-`, [descriptorBuffer, photoBuffer, matricula])
+  INSERT INTO TBUSUARIO_FACEID (DESCRIPTOR_FACIAL, MATRICULA)
+  VALUES (?, ?)
+`, [descriptorBuffer, matricula])
 ```
 
-### 4.4 Recuperação da Foto
+### 4.4 Observação para terminais sem HTTPS
 
-**Endpoint para servir foto:**
-```javascript
-// GET /api/face-id/photo/:faceIdId
-router.get('/photo/:faceIdId', async (req, res) => {
-  const { faceIdId } = req.params
-
-  const result = await db.query(`
-    SELECT FOTO_URL
-    FROM TBUSUARIO_FACEID
-    WHERE FACEID_ID = ?
-      AND ATIVO = 'S'
-  `, [faceIdId])
-
-  if (!result || !result[0]) {
-    return res.status(404).json({ error: 'Foto não encontrada' })
-  }
-
-  const photoBuffer = result[0].FOTO_URL
-
-  // Retornar como imagem
-  res.set('Content-Type', 'image/jpeg')
-  res.send(photoBuffer)
-})
-```
-
-**No Frontend:**
-```javascript
-// Exibir foto
-<img
-  src={`/api/face-id/photo/${faceIdId}`}
-  alt="Foto cadastrada"
-/>
-```
+Em navegadores modernos, câmera via `getUserMedia` exige contexto seguro. Em máquinas isoladas sem HTTPS, a forma mais simples é rodar frontend e backend localmente em cada terminal e abrir a aplicação por `http://localhost` ou `http://127.0.0.1`, que os navegadores tratam como origem segura para câmera. Todos os terminais devem apontar para o mesmo Firebird central, onde ficam os descriptors. Se os terminais acessarem `http://servidor:porta` pela rede, a câmera pode ser bloqueada; nesse caso será necessário certificado local, política corporativa do navegador ou empacotamento desktop/local.
 
 ---
 
@@ -873,14 +792,13 @@ router.get('/photo/:faceIdId', async (req, res) => {
 ### 5.2 Tamanho Estimado das Tabelas
 
 **TBUSUARIO_FACEID:**
-- Tamanho por registro (sem foto): ~1 KB (512 bytes descriptor + campos)
-- Tamanho por registro (com foto): ~100 KB (512 bytes descriptor + 100 KB foto + campos)
-- **1.000 usuários**: ~100 MB (com fotos) ou ~1 MB (sem fotos)
-- **10.000 usuários**: ~1 GB (com fotos) ou ~10 MB (sem fotos)
+- Tamanho por registro: ~1 KB (512 bytes descriptor + campos)
+- **1.000 usuários**: ~1 MB
+- **10.000 usuários**: ~10 MB
 
 **Recomendação:**
-- Para sistemas pequenos (<5.000 usuários): Armazenar foto no banco é viável
-- Para sistemas grandes (>10.000 usuários): Considerar armazenar apenas descriptor ou usar sistema de arquivos
+- Manter apenas descriptor no banco para reduzir superfície de ataque e simplificar operação dos 10 terminais.
+- Não criar endpoint de foto nem campo BLOB de imagem.
 
 **TBACESSO (registros de Face ID):**
 - Tamanho por registro: ~500 bytes (incluindo JSON no campo ATIVIDADE)
@@ -889,20 +807,19 @@ router.get('/photo/:faceIdId', async (req, res) => {
 - **Nota:** TBACESSO já existe e armazena outros tipos de acesso também
 
 **Total estimado para 10.000 usuários:**
-- Com fotos: ~1 GB (TBUSUARIO_FACEID) + ~45 MB (TBACESSO) = **~1.05 GB**
-- Sem fotos: ~10 MB (TBUSUARIO_FACEID) + ~45 MB (TBACESSO) = **~55 MB**
+- Descriptor-only: ~10 MB (TBUSUARIO_FACEID) + ~45 MB (TBACESSO) = **~55 MB**
 
 ### 5.3 Backup e Recuperação
 
 **Dados Críticos:**
-- ✅ TBUSUARIO_FACEID (dados biométricos + fotos armazenadas no banco)
+- ✅ TBUSUARIO_FACEID (templates biométricos, sem foto persistida)
 - ✅ TBACESSO (logs de auditoria - já existente no sistema)
 
 **Estratégia:**
-- Backup diário do banco completo (inclui fotos)
+- Backup diário do banco completo
 - Retenção: 30 dias
 - TBACESSO segue política de retenção já estabelecida no sistema
-- **Vantagem:** Backup único (não precisa backup separado de arquivos)
+- **Vantagem:** Backup único e leve, sem diretórios de foto para sincronizar entre terminais
 
 ---
 
@@ -924,7 +841,6 @@ async function migrateFaceIdToBackend() {
       body: JSON.stringify({
         name: user.name,
         matricula: user.matricula,
-        photoBase64: user.photoUrl,
         descriptor: user.descriptors
       })
     })
@@ -953,11 +869,7 @@ CREATE TABLE TBUSUARIO_FACEID (
 
     -- Descriptor facial: vetor de 128 floats (512 bytes)
     -- Usado para reconhecimento e matching facial
-    DESCRIPTOR_FACIAL   BLOB SUB_TYPE BINARY SEGMENT SIZE 512,
-
-    -- Foto do rosto: imagem JPEG/PNG (50-200 KB típico)
-    -- Armazenada diretamente no banco de dados
-    FOTO_URL            BLOB SUB_TYPE BINARY SEGMENT SIZE 8192,
+    DESCRIPTOR_FACIAL   BLOB SUB_TYPE BINARY SEGMENT SIZE 512 NOT NULL,
 
     MATRICULA           VARCHAR(30),
     ATIVO               CHAR(1) DEFAULT 'S',
@@ -972,7 +884,7 @@ CREATE TABLE TBUSUARIO_FACEID (
     USUARIONOME_D       VARCHAR(30),
     CONSTRAINT PK_TBUSUARIO_FACEID PRIMARY KEY (FACEID_ID),
     CONSTRAINT FK_TBUSUARIO_FACEID FOREIGN KEY (USUARIO_ID)
-        REFERENCES TBUSUARIO(USUARIO_ID) ON DELETE CASCADE,
+        REFERENCES TBUSUARIO(USUARIO_ID),
     CONSTRAINT CHK_TBUSUARIO_FACEID_ATIVO CHECK (ATIVO IN ('S', 'N'))
 );
 
@@ -1009,11 +921,11 @@ COMMIT;
 -- OBSERVAÇÕES IMPORTANTES
 -- ============================================
 --
--- 1. ARMAZENAMENTO DE FOTOS:
---    - As fotos são armazenadas diretamente no banco de dados
---    - Campo FOTO_URL é BLOB SUB_TYPE BINARY (não VARCHAR)
---    - Tamanho típico: 50-200 KB por foto
---    - Não é necessário gerenciar arquivos no sistema de arquivos
+-- 1. POLÍTICA DE FOTOS:
+--    - Fotos não são persistidas no banco nem no filesystem
+--    - A imagem existe apenas em memória no navegador durante a captura
+--    - O backend recebe e grava somente DESCRIPTOR_FACIAL
+--    - Não criar campo nem endpoint para persistência de foto
 --
 -- 2. DESCRIPTOR FACIAL:
 --    - Campo DESCRIPTOR_FACIAL armazena vetor de 128 floats
@@ -1023,7 +935,7 @@ COMMIT;
 --
 -- 3. AUDITORIA (TBACESSO):
 --    - A tabela TBACESSO (já existente) registra tentativas de autenticação
---    - Não é necessário criar tabela TBFACEID_TENTATIVA
+--    - Não é necessário criar tabela adicional de tentativas
 --    - Mapeamento de campos TBACESSO para Face ID:
 --      * LOCAL = 'WEB_FACE_ID'
 --      * TIPO = 'FACE_ID_AUTH_SUCCESS' ou 'FACE_ID_AUTH_FAILED'

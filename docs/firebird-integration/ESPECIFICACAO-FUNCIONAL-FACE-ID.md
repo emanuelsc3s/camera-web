@@ -90,15 +90,14 @@ O sistema será integrado ao sistema legado existente (Firebird 2.5) como uma **
 **Regras de Negócio:**
 - RN-001: Apenas usuários já cadastrados no sistema podem registrar Face ID
 - RN-002: Cada usuário pode ter apenas um cadastro de Face ID ativo
-- RN-003: O sistema deve capturar uma foto do rosto do usuário
+- RN-003: O sistema deve capturar a imagem da câmera somente em memória para gerar o descriptor facial
 - RN-004: O sistema deve detectar automaticamente o rosto na imagem
 - RN-005: O cadastro só é concluído se um rosto for detectado com sucesso
 - RN-006: O usuário pode informar matrícula (opcional) durante o cadastro
-- RN-007: A foto do rosto é armazenada no banco de dados para referência
+- RN-007: A foto do rosto não deve ser enviada ao backend nem persistida no banco ou em arquivos
 
 **Dados Capturados:**
 - Características faciais únicas (descriptor biométrico)
-- Foto do rosto do usuário
 - Matrícula (opcional)
 - Data e hora do cadastro
 - Usuário que realizou o cadastro
@@ -147,12 +146,12 @@ O sistema será integrado ao sistema legado existente (Firebird 2.5) como uma **
 - RN-016: Apenas o próprio usuário ou administradores podem atualizar Face ID
 - RN-017: A atualização substitui completamente o cadastro anterior
 - RN-018: O sistema deve registrar quem realizou a atualização
-- RN-019: A foto anterior é substituída pela nova foto
+- RN-019: O descriptor anterior é substituído pelo novo descriptor gerado a partir da câmera
 - RN-020: O contador de tentativas falhas é resetado após atualização
 
 **Casos de Uso:**
 - Usuário mudou aparência (barba, óculos, corte de cabelo)
-- Qualidade da foto anterior estava ruim
+- Captura anterior gerou descriptor com baixa precisão
 - Usuário deseja melhorar precisão do reconhecimento
 
 ---
@@ -165,7 +164,7 @@ O sistema será integrado ao sistema legado existente (Firebird 2.5) como uma **
 - RN-021: Apenas o próprio usuário ou administradores podem excluir Face ID
 - RN-022: A exclusão é lógica (campo ATIVO = 'N'), não física
 - RN-023: O sistema deve registrar quem realizou a exclusão
-- RN-024: Dados biométricos e foto são mantidos para auditoria
+- RN-024: O descriptor biométrico é mantido conforme política de retenção; fotos não existem para retenção
 - RN-025: Usuário pode reativar Face ID posteriormente (novo cadastro)
 
 **Motivos para Exclusão:**
@@ -235,10 +234,10 @@ O sistema será integrado ao sistema legado existente (Firebird 2.5) como uma **
 6. Sistema exibe preview da câmera
 7. Sistema detecta rosto automaticamente
 8. Sistema exibe indicador visual (moldura verde ao redor do rosto)
-9. Usuário clica em "Capturar Foto"
-10. Sistema processa imagem e extrai características faciais
+9. Usuário clica em "Capturar"
+10. Sistema processa a imagem em memória e extrai o descriptor facial
 11. Sistema exibe mensagem de sucesso
-12. Sistema salva dados biométricos e foto no banco de dados
+12. Sistema salva somente o descriptor biométrico no banco de dados
 13. Usuário pode agora usar Face ID para login
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -323,13 +322,13 @@ O sistema será integrado ao sistema legado existente (Firebird 2.5) como uma **
 2. Sistema exibe informações do Face ID atual:
    - Data de cadastro
    - Último acesso
-   - Foto de referência
+   - Status do cadastro biométrico
 3. Usuário clica em "Atualizar Face ID"
 4. Sistema solicita confirmação: "Deseja atualizar seu Face ID? O cadastro anterior será substituído."
 5. Usuário confirma
 6. Sistema inicia processo de captura (igual ao cadastro)
-7. Sistema captura nova foto
-8. Sistema processa e salva novos dados
+7. Sistema captura nova imagem somente em memória
+8. Sistema processa e salva o novo descriptor
 9. Sistema exibe mensagem: "Face ID atualizado com sucesso!"
 10. Sistema registra atualização na auditoria
 
@@ -408,9 +407,9 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 │ - USUARIO_ID    │         │ - FACEID_ID (PK)     │
 │ - NOME          │         │ - USUARIO_ID (FK)    │
 │ - EMAIL         │         │ - DESCRIPTOR_FACIAL  │
-│ - FAILED_ATTEMPTS│        │ - FOTO_URL           │
-└─────────────────┘         │ - MATRICULA          │
-                            │ - ATIVO              │
+│ - FAILED_ATTEMPTS│        │ - MATRICULA          │
+└─────────────────┘         │ - ATIVO              │
+                            │ - DATA_INC           │
                             └──────────────────────┘
                                       │
                                       │ registra
@@ -431,14 +430,13 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 
 ### 5.2. Tabela: TBUSUARIO_FACEID
 
-**Descrição:** Armazena os dados biométricos e foto dos usuários cadastrados com Face ID.
+**Descrição:** Armazena somente o template biométrico dos usuários cadastrados com Face ID. A imagem da câmera é usada apenas em memória no frontend para gerar o descriptor e é descartada em seguida.
 
 | Campo | Tipo | Descrição | Obrigatório |
 |-------|------|-----------|-------------|
 | FACEID_ID | INTEGER | Identificador único do Face ID | ✅ Sim |
 | USUARIO_ID | INTEGER | Referência ao usuário (FK) | ❌ Não |
 | DESCRIPTOR_FACIAL | BLOB | Características faciais únicas (512 bytes) | ✅ Sim |
-| FOTO_URL | BLOB | Foto do rosto do usuário (50-200 KB) | ✅ Sim |
 | MATRICULA | VARCHAR(30) | Matrícula do usuário | ❌ Não |
 | ATIVO | CHAR(1) | Status: 'S' (ativo) ou 'N' (inativo) | ✅ Sim |
 | DATA_INC | TIMESTAMP | Data/hora do cadastro | ✅ Sim |
@@ -454,7 +452,8 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 **Regras:**
 - Um usuário pode ter apenas um Face ID ativo (ATIVO = 'S')
 - Exclusão é lógica (ATIVO = 'N'), dados são mantidos para auditoria
-- Foto e descriptor são armazenados diretamente no banco de dados
+- Somente o descriptor é armazenado no banco de dados
+- A foto não é armazenada, não é enviada ao backend e não participa da auditoria
 
 ---
 
@@ -513,16 +512,15 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 
 | Cenário | Usuários | Tamanho Estimado |
 |---------|----------|------------------|
-| Pequeno | 100 usuários | ~10 MB |
-| Médio | 1.000 usuários | ~100 MB |
-| Grande | 10.000 usuários | ~1 GB |
-| Muito Grande | 50.000 usuários | ~5 GB |
+| Pequeno | 100 usuários | ~100 KB |
+| Médio | 1.000 usuários | ~1 MB |
+| Grande | 10.000 usuários | ~10 MB |
+| Muito Grande | 50.000 usuários | ~50 MB |
 
 **Cálculo:**
 - Descriptor facial: 512 bytes
-- Foto: ~100 KB (média)
 - Metadados: ~500 bytes
-- **Total por usuário: ~100 KB**
+- **Total por usuário: ~1 KB**
 
 ---
 
@@ -571,6 +569,7 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 **Proteção de Dados Biométricos:**
 - 🔒 Dados armazenados no banco de dados com controle de acesso
 - 🔒 Descriptor facial não pode ser revertido para foto original
+- 🔒 Foto original descartada após a geração do descriptor
 - 🔒 Acesso aos dados apenas por usuários autorizados
 - 🔒 Auditoria completa de todos os acessos
 - 🔒 Backup criptografado do banco de dados
@@ -662,7 +661,7 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 | **Um Face ID por Usuário** | Cada usuário pode ter apenas um cadastro ativo | Simplificação e segurança |
 | **Apenas Desktop** | Fase inicial apenas para desktop (não mobile) | Foco na implementação web |
 | **Threshold Fixo** | Similaridade mínima de 60% (não configurável pelo usuário) | Balanceamento segurança/usabilidade |
-| **Foto Obrigatória** | Foto é armazenada obrigatoriamente | Auditoria e referência visual |
+| **Descriptor Obrigatório** | O descriptor facial é armazenado obrigatoriamente | Autenticação e rastreabilidade sem persistir foto |
 | **Exclusão Lógica** | Dados não são deletados fisicamente | Conformidade e auditoria |
 
 ---
@@ -700,7 +699,7 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 | **Descriptor Facial** | Vetor matemático de 128 números que representa características únicas do rosto |
 | **Threshold** | Limite mínimo de similaridade (60%) para considerar autenticação bem-sucedida |
 | **Match** | Correspondência entre rosto capturado e cadastro no banco de dados |
-| **BLOB** | Binary Large Object - tipo de dado para armazenar dados binários (foto, descriptor) |
+| **BLOB** | Binary Large Object - tipo de dado para armazenar dados binários, usado aqui para o descriptor |
 | **Exclusão Lógica** | Marcar registro como inativo (ATIVO='N') sem deletar fisicamente |
 | **Auditoria** | Registro completo de todas as operações para rastreabilidade |
 | **LGPD** | Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018) |

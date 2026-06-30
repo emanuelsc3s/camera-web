@@ -13,7 +13,7 @@ Este conjunto de documentos descreve a implementação completa do sistema de re
 
 **Conteúdo:**
 - Arquitetura do sistema (atual vs. futuro)
-- 8 endpoints REST completos:
+- 7 endpoints REST completos:
   - POST /face-id/register (Cadastro)
   - POST /face-id/authenticate (Autenticação)
   - GET /face-id/users (Listar usuários)
@@ -21,7 +21,6 @@ Este conjunto de documentos descreve a implementação completa do sistema de re
   - PUT /face-id/users/:id (Atualizar)
   - DELETE /face-id/users/:id (Deletar)
   - GET /face-id/users/:id/attempts (Histórico)
-  - GET /face-id/photos/:path (Servir fotos)
 - Algoritmo de matching (distância euclidiana)
 - Conversão Float32Array ↔ BLOB
 - Requisitos de segurança e LGPD
@@ -49,14 +48,14 @@ Este conjunto de documentos descreve a implementação completa do sistema de re
   - Formato JSON do campo ATIVIDADE
   - Queries de auditoria e histórico
 - Queries úteis (cadastro, autenticação, histórico)
-- Armazenamento de fotos (estrutura de diretórios)
+- Política descriptor-only: foto não persistida
 - Considerações de performance
 - Scripts DDL completos para instalação
 
 **Quando usar:** Para criar as tabelas no Firebird e entender a estrutura de dados.
 
 **Notas importantes:**
-- Não é necessário criar tabela TBFACEID_TENTATIVA
+- Não é necessário criar tabela adicional de tentativas
 - A tabela TBACESSO é usada para auditoria (histórico completo)
 - O campo TBUSUARIO.FAILED_ATTEMPTS é a fonte de verdade para contagem de falhas
 
@@ -72,10 +71,6 @@ Este conjunto de documentos descreve a implementação completa do sistema de re
   - Validação de descritores
   - Conversão Buffer ↔ Array
   - Algoritmo de matching
-- Serviço de gerenciamento de fotos (faceIdPhotos.service.js)
-  - Salvamento de fotos Base64
-  - Estrutura de diretórios por data
-  - Exclusão de fotos
 - Serviço principal Face ID (faceId.service.js)
   - Cadastro de usuários
   - Autenticação facial
@@ -136,7 +131,7 @@ Siga o documento **09-face-id-backend-implementation.md**:
 
 1. Criar estrutura de diretórios
 2. Implementar utilitários (vectorMath.js)
-3. Implementar serviços (faceIdPhotos.service.js, faceId.service.js)
+3. Implementar serviço principal (`faceId.service.js`)
 4. Criar controllers e rotas
 5. Adicionar middlewares de validação e rate limiting
 
@@ -144,7 +139,7 @@ Siga o documento **09-face-id-backend-implementation.md**:
 
 Siga o documento **10-face-id-security-flows.md**:
 
-1. Implementar HTTPS
+1. Configurar execução local por `localhost`/`127.0.0.1` nos terminais ou HTTPS local quando necessário
 2. Configurar rate limiting
 3. Adicionar logs de auditoria
 4. Implementar termo de consentimento no frontend
@@ -162,7 +157,6 @@ const response = await fetch('/api/face-id/register', {
   body: JSON.stringify({
     name: 'João Silva',
     matricula: 'MAT001',
-    photoBase64: 'data:image/jpeg;base64,...',
     descriptor: [0.123, -0.456, ...] // 128 dimensões
   })
 })
@@ -187,6 +181,7 @@ const response = await fetch('/api/face-id/authenticate', {
 - Representa características únicas do rosto
 - Gerado pela biblioteca face-api.js
 - Armazenado como BLOB no Firebird
+- A foto usada para gerar o descriptor não é persistida
 
 ### Matching (Correspondência)
 - Algoritmo: Distância Euclidiana
@@ -201,12 +196,17 @@ const response = await fetch('/api/face-id/authenticate', {
 - Auditoria obrigatória
 - Rate limiting essencial
 
+### Câmera em Máquinas Isoladas
+- Sem HTTPS, rodar frontend e backend localmente em cada terminal e abrir por `http://localhost` ou `http://127.0.0.1`.
+- Evitar acesso por `http://servidor:porta` a partir dos terminais, porque navegadores modernos tendem a bloquear câmera fora de contexto seguro.
+- O Firebird central armazena os descriptors; por isso o login por Face ID funciona em todos os terminais sem copiar fotos.
+
 ---
 
 ## 📊 Arquitetura Resumida
 
 ```
-┌──────────────┐     HTTPS      ┌──────────────┐     Pool     ┌──────────────┐
+┌──────────────┐   localhost    ┌──────────────┐     Pool     ┌──────────────┐
 │   Frontend   │ ◄────────────► │   Backend    │ ◄──────────► │  Firebird    │
 │  React +     │                │  Node.js +   │              │  2.5         │
 │  face-api.js │                │  Express     │              │              │
@@ -218,12 +218,7 @@ const response = await fetch('/api/face-id/authenticate', {
        │                               │ Auditoria                   │
        │                               │                             │
        │                               ▼                             │
-       │                        ┌──────────────┐                     │
-       │                        │  Filesystem  │                     │
-       │                        │  /uploads/   │                     │
-       │                        │  face-id/    │                     │
-       │                        │  photos/     │                     │
-       │                        └──────────────┘                     │
+       │                        Sem persistência de foto             │
 ```
 
 ---
@@ -240,13 +235,13 @@ const response = await fetch('/api/face-id/authenticate', {
 - React 18+
 - face-api.js
 - Webcam funcional
-- HTTPS (para acesso à câmera)
+- Origem segura para câmera: `localhost`, `127.0.0.1` ou HTTPS local
 
 ### Banco de Dados
 - Firebird 2.5 ou superior
 - Tabela TBUSUARIO existente
 - Tabela TBACESSO existente (para auditoria)
-- Espaço em disco para fotos
+- Todos os terminais apontando para o mesmo Firebird ou para uma rotina controlada de sincronização
 
 ---
 
@@ -255,12 +250,11 @@ const response = await fetch('/api/face-id/authenticate', {
 - [ ] Criar tabela TBUSUARIO_FACEID no Firebird
 - [ ] Verificar existência da tabela TBACESSO (já deve existir)
 - [ ] Implementar utilitários de matemática vetorial
-- [ ] Implementar serviço de gerenciamento de fotos
 - [ ] Implementar serviço principal de Face ID
 - [ ] Adaptar método de auditoria para usar TBACESSO
 - [ ] Criar controllers e rotas
 - [ ] Adicionar validações e rate limiting
-- [ ] Configurar HTTPS
+- [ ] Configurar execução local por `localhost`/`127.0.0.1` nos terminais
 - [ ] Implementar logs de auditoria via TBACESSO
 - [ ] Adicionar termo de consentimento no frontend
 - [ ] Testar cadastro de Face ID

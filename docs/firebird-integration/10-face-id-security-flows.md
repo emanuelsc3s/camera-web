@@ -55,33 +55,27 @@ Este documento detalha os fluxos completos de cadastro e autenticação do siste
      │              ├──────────────►│              │               │
      │              │ {name,       │              │               │
      │              │  matricula,  │              │               │
-     │              │  photoBase64,│              │               │
      │              │  descriptor} │              │               │
      │              │               │              │               │
      │              │               │ 10. Valida  │               │
      │              │               │     dados   │               │
      │              │               │             │               │
      │              │               │ 11. INSERT  │               │
-     │              │               │  TBFACEID_  │               │
-     │              │               │  USUARIO    │               │
+     │              │               │ TBUSUARIO_  │               │
+     │              │               │   FACEID    │               │
      │              │               ├─────────────►│               │
      │              │               │              │               │
      │              │               │ 12. FACEID_ID│              │
      │              │               │◄─────────────┤               │
      │              │               │              │               │
-     │              │               │ 13. Salva   │               │
-     │              │               │     foto    │               │
-     │              │               ├──────────────┼──────────────►│
+     │              │               │ 13. Sem foto│               │
+     │              │               │ persistida  │               │
      │              │               │              │               │
-     │              │               │ 14. UPDATE  │               │
-     │              │               │  FOTO_URL   │               │
-     │              │               ├─────────────►│               │
-     │              │               │              │               │
-     │              │ 15. 201      │              │               │
+     │              │ 14. 201      │              │               │
      │              │  Created     │              │               │
      │              │◄──────────────┤              │               │
      │              │ {faceIdId,   │              │               │
-     │              │  photoUrl}   │              │               │
+     │              │  descriptorOnly}             │               │
      │              │               │              │               │
      │ 16. Toast:  │               │              │               │
      │ "Cadastrado │               │              │               │
@@ -94,10 +88,11 @@ Este documento detalha os fluxos completos de cadastro e autenticação do siste
 
 **Antes de enviar para o backend:**
 
-1. **Validação da Foto:**
+1. **Validação da Captura:**
    - Verificar se exatamente 1 rosto foi detectado
    - Score de detecção >= 0.8 (80% de confiança)
-   - Qualidade da imagem adequada
+   - Iluminação e enquadramento adequados
+   - Descartar a imagem após gerar o descriptor
 
 2. **Validação do Descriptor:**
    - Array com exatamente 128 dimensões
@@ -159,11 +154,6 @@ const registerValidation = [
     .trim()
     .isEmail().withMessage('Email inválido')
     .isLength({ max: 100 }).withMessage('Email muito longo'),
-  
-  body('photoBase64')
-    .notEmpty().withMessage('Foto é obrigatória')
-    .matches(/^data:image\/(jpeg|jpg|png);base64,/)
-    .withMessage('Formato de imagem inválido'),
   
   body('descriptor')
     .isArray({ min: 128, max: 128 })
@@ -386,11 +376,12 @@ Segundo a LGPD (Lei Geral de Proteção de Dados), dados biométricos são class
 3. ✅ **Minimização de Dados**
    - Armazenar apenas o descriptor (vetor numérico)
    - Não armazenar imagem completa do rosto
-   - Foto apenas para referência visual (opcional)
+   - Não enviar foto ao backend
 
 4. ✅ **Segurança**
    - Criptografia em repouso (banco de dados)
-   - Criptografia em trânsito (HTTPS)
+   - Criptografia em trânsito quando houver acesso por rede
+   - Em terminais isolados sem HTTPS, executar frontend e backend localmente por `localhost`/`127.0.0.1` para manter a câmera disponível em contexto seguro
    - Controle de acesso rigoroso
 
 5. ✅ **Direito ao Esquecimento**
@@ -439,7 +430,11 @@ const ConsentModal = () => {
 
 ### 3.3 Criptografia de Dados
 
-**Em Trânsito (HTTPS):**
+**Em Trânsito / Origem Segura:**
+
+Em navegadores modernos, `getUserMedia` só fica disponível em contexto seguro. Para os terminais isolados deste projeto, a implantação recomendada é rodar frontend e backend localmente em cada terminal e abrir a aplicação em `http://localhost` ou `http://127.0.0.1`, mantendo o Firebird central como fonte única dos descriptors. Se o frontend for acessado por outro host da rede, como `http://servidor:porta`, configure HTTPS local, política corporativa do navegador ou empacotamento desktop/local.
+
+Quando houver tráfego web entre máquinas fora de `localhost`, use HTTPS:
 
 ```javascript
 // Configuração do servidor Express
@@ -883,7 +878,6 @@ describe('Face ID API', () => {
       .send({
         name: 'Teste Usuario',
         matricula: 'TEST001',
-        photoBase64: 'data:image/jpeg;base64,/9j/4AAQ...',
         descriptor: new Array(128).fill(0.5)
       })
 
@@ -993,14 +987,14 @@ WHERE a.DATA >= CURRENT_DATE
 **Soluções:**
 - Aumentar threshold (ex: 0.6 → 0.7)
 - Verificar qualidade da iluminação
-- Re-cadastrar Face ID com melhor foto
+- Re-cadastrar Face ID com nova captura em melhor iluminação
 - Verificar se descriptor está sendo salvo corretamente
 
 **Problema:** Muitos falsos positivos (usuário errado reconhecido)
 
 **Soluções:**
 - Diminuir threshold (ex: 0.6 → 0.5)
-- Melhorar qualidade das fotos de cadastro
+- Melhorar iluminação e enquadramento no momento da captura
 - Verificar se há rostos muito similares cadastrados
 
 **Problema:** Performance lenta no matching
