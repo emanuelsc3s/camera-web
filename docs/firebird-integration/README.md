@@ -13,7 +13,7 @@ Esta documentação completa cobre a migração do sistema de inspeções de câ
 
 Análise completa do sistema existente e como ele será mapeado para o Firebird:
 - 📊 Estrutura de dados atual (LocalStorage)
-- 🗄️ Estrutura de tabelas Firebird (TB_PRODUTOS, TB_INSPECOES)
+- 🗄️ Estrutura de tabelas Firebird (`TBOP`, `TBPRODUTOS` e `TBINSPECAO_MANUAL`)
 - 🔄 Mapeamento de funções (LocalStorage → API)
 - 💾 Estratégia de armazenamento de fotos
 - 📝 Transformação de dados
@@ -159,8 +159,9 @@ LocalStorage (Atual)          →          Firebird + Backend (Futuro)
                                                      ↓
                                         ┌────────────────────────────┐
                                         │    Firebird Database       │
-                                        │  - TB_PRODUTOS             │
-                                        │  - TB_INSPECOES            │
+                                        │  - TBOP (referência da OP)│
+                                        │  - TBPRODUTOS (cadastro) │
+                                        │  - TBINSPECAO_MANUAL     │
                                         └────────────────────────────┘
 ```
 
@@ -183,8 +184,10 @@ LocalStorage (Atual)          →          Firebird + Backend (Futuro)
 
 ### Database
 - **Firebird** - SGBD relacional open-source
-- **TB_PRODUTOS** - Tabela de produtos/referências
-- **TB_INSPECOES** - Tabela de inspeções
+- **TBOP** - Fonte dos dados de OP, lote, validade, GTIN e ANVISA
+- **TBPRODUTOS** - Cadastro de produtos usado para complementar a referência
+- **TBINSPECAO_MANUAL** - Nova tabela de inspeções manuais deste projeto
+- **TBINSPECAO** - Tabela existente fora do escopo; permanece reservada para o projeto SICFAR
 - **Generators/Triggers** - Auto-incremento de IDs
 
 ---

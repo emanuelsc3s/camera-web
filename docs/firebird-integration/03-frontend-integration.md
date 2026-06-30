@@ -148,6 +148,7 @@ export async function createInspection(data: {
   fotoBase64: string;
   referenceData: ReferenceData;
   inspectionStates: InspectionStates;
+  fase?: string;
   observacoes?: string;
   usuario?: string;
 }): Promise<{ id: number; message: string }> {
@@ -274,6 +275,7 @@ export function useCreateInspection() {
       fotoBase64: string;
       referenceData: ReferenceData;
       inspectionStates: InspectionStates;
+      fase?: string;
       observacoes?: string;
       usuario?: string;
     }) => createInspection(data),

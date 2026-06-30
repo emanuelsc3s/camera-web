@@ -142,18 +142,27 @@ Este documento apresenta uma visão geral da arquitetura de integração entre a
 │                   (Porta 3050 - padrão)                          │
 │                                                                  │
 │  ┌────────────────────┐        ┌──────────────────────────┐    │
-│  │   TB_PRODUTOS      │        │    TB_INSPECOES          │    │
-│  │  - ID_PRODUTO (PK) │◄───┐   │  - ID_INSPECAO (PK)      │    │
-│  │  - OP              │    │   │  - ID_PRODUTO (FK) ──────┤    │
-│  │  - LOTE            │    └───┤  - DATA_HORA             │    │
+│  │       TBOP         │        │    TBINSPECAO_MANUAL     │    │
+│  │  - OP_ID (PK)      │◄───┐   │  - INSPECAO_MANUAL_ID    │    │
+│  │  - OP              │    │   │  - OP_ID (FK opcional) ──┤    │
+│  │  - LOTE            │    └───┤  - DATA                  │    │
 │  │  - VALIDADE        │        │  - CAMINHO_FOTO          │    │
-│  │  - PRODUTO         │        │  - GTIN_CONFORME         │    │
-│  │  - REGISTRO_ANVISA │        │  - DATAMATRIX_CONFORME   │    │
-│  │  - GTIN            │        │  - LOTE_CONFORME         │    │
-│  └────────────────────┘        │  - VALIDADE_CONFORME     │    │
-│                                 │  - OBSERVACOES           │    │
-│                                 │  - USUARIO               │    │
-│                                 └──────────────────────────┘    │
+│  │  - GTIN            │        │  - campos *_CONFORME     │    │
+│  │  - ANVISA          │        │  - OBSERVACOES           │    │
+│  └────────────────────┘        │  - LINHAPRODUCAO_ID      │    │
+│          │                     │  - FASE                  │    │
+│          │                     │  - USUARIO               │    │
+│          │                     └──────────────────────────┘    │
+│          │ consulta auxiliar                                   │
+│          ↓                                                      │
+│  ┌────────────────────┐                                        │
+│  │    TBPRODUTOS      │                                        │
+│  │  - PRODUTO_ID      │                                        │
+│  │  - ERP_PRODUTO     │                                        │
+│  │  - PRODUTO         │                                        │
+│  └────────────────────┘                                        │
+│                                                                  │
+│  Observação: TBINSPECAO existe no banco, mas pertence ao SICFAR. │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
@@ -206,18 +215,18 @@ Este documento apresenta uma visão geral da arquitetura de integração entre a
      │                │                 │ 4. Salva foto   │
      │                │                 │    no disco     │
      │                │                 │                 │
-     │                │                 │ 5. INSERT INTO  │
-     │                │                 │    TB_PRODUTOS  │
+     │                │                 │ 5. SELECT TBOP  │
+     │                │                 │    + TBPRODUTOS │
      │                │                 ├────────────────►│
      │                │                 │                 │
-     │                │                 │ 6. ID_PRODUTO   │
+     │                │                 │ 6. Dados da OP  │
      │                │                 │◄────────────────┤
      │                │                 │                 │
      │                │                 │ 7. INSERT INTO  │
-     │                │                 │    TB_INSPECOES │
+     │                │                 │    TBINSPECAO_MANUAL │
      │                │                 ├────────────────►│
      │                │                 │                 │
-     │                │                 │ 8. ID_INSPECAO  │
+     │                │                 │ 8. INSPECAO_MANUAL_ID │
      │                │                 │◄────────────────┤
      │                │                 │                 │
      │                │ 200 OK          │                 │
@@ -344,7 +353,8 @@ Este documento apresenta uma visão geral da arquitetura de integração entre a
 
 ### Banco de Dados
 - **SGBD:** Firebird 3.0+
-- **Tabelas:** TB_PRODUTOS, TB_INSPECOES
+- **Tabelas:** TBOP e TBPRODUTOS para referência; TBINSPECAO_MANUAL para gravação deste projeto
+- **Fora do escopo:** TBINSPECAO existente, reservada para o projeto SICFAR
 - **Armazenamento de Fotos:** Sistema de arquivos
 
 ### Ferramentas de Desenvolvimento

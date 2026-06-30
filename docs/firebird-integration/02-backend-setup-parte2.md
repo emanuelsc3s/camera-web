@@ -13,7 +13,7 @@ const inspeçõesService = require('../services/inspecoes.service');
  */
 async function create(req, res, next) {
   try {
-    const { fotoBase64, referenceData, inspectionStates, observacoes, usuario } = req.body;
+    const { fotoBase64, referenceData, inspectionStates, observacoes, usuario, fase } = req.body;
 
     // Validações básicas
     if (!fotoBase64) {
@@ -30,6 +30,7 @@ async function create(req, res, next) {
       inspectionStates,
       observacoes,
       usuario,
+      fase,
     });
 
     res.status(201).json(result);
@@ -165,6 +166,7 @@ async function getByOP(req, res, next) {
       produto: result.PRODUTO,
       registroAnvisa: result.REGISTRO_ANVISA,
       gtin: result.GTIN,
+      linhaProducaoId: result.LINHAPRODUCAO_ID,
     };
 
     res.json(formatted);
@@ -193,6 +195,7 @@ async function getByGTIN(req, res, next) {
       produto: result.PRODUTO,
       registroAnvisa: result.REGISTRO_ANVISA,
       gtin: result.GTIN,
+      linhaProducaoId: result.LINHAPRODUCAO_ID,
     };
 
     res.json(formatted);
@@ -396,7 +399,7 @@ module.exports = errorHandler;
  * Valida dados de criação de inspeção
  */
 function validateInspectionData(req, res, next) {
-  const { fotoBase64, referenceData, inspectionStates } = req.body;
+  const { fotoBase64, referenceData, inspectionStates, fase } = req.body;
 
   const errors = [];
 
@@ -427,6 +430,11 @@ function validateInspectionData(req, res, next) {
         errors.push(`Estado '${state}' é obrigatório em inspectionStates`);
       }
     }
+  }
+
+  // Valida fase opcional
+  if (fase && (typeof fase !== 'string' || fase.length > 10)) {
+    errors.push('Campo fase deve ser texto com no máximo 10 caracteres');
   }
 
   if (errors.length > 0) {
@@ -649,7 +657,7 @@ Thumbs.db
 
 ---
 
-## 12. Criação das Tabelas no Firebird
+## 12. Criação da Tabela Manual no Firebird
 
 ### 12.1 Script SQL - `scripts/create-tables.sql`
 
@@ -659,70 +667,66 @@ Thumbs.db
 -- Sistema de Inspeção - SysView Camera
 -- ========================================
 
--- Tabela de Produtos
-CREATE TABLE TB_PRODUTOS (
-  ID_PRODUTO       INTEGER NOT NULL PRIMARY KEY,
-  OP               VARCHAR(50) NOT NULL,
-  LOTE             VARCHAR(50) NOT NULL,
-  VALIDADE         VARCHAR(10),
-  PRODUTO          VARCHAR(500) NOT NULL,
-  REGISTRO_ANVISA  VARCHAR(50),
-  GTIN             VARCHAR(14) NOT NULL,
-  DATA_CRIACAO     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Pré-requisitos do banco atual:
+-- - TBOP já existe e contém OP, LOTE, VALIDADE, GTIN e ANVISA.
+-- - TBPRODUTOS já existe e é o cadastro de produtos usado pelo projeto.
+-- - TBLINHA_PRODUCAO já existe e contém as linhas de produção.
+-- - TBINSPECAO já existe, mas pertence ao projeto SICFAR e não deve ser usada aqui.
 
--- Generator para ID_PRODUTO
-CREATE GENERATOR GEN_TB_PRODUTOS_ID;
-SET GENERATOR GEN_TB_PRODUTOS_ID TO 0;
-
--- Trigger para auto-incremento de ID_PRODUTO
-CREATE TRIGGER TRG_TB_PRODUTOS_BI FOR TB_PRODUTOS
-ACTIVE BEFORE INSERT POSITION 0
-AS
-BEGIN
-  IF (NEW.ID_PRODUTO IS NULL) THEN
-    NEW.ID_PRODUTO = GEN_ID(GEN_TB_PRODUTOS_ID, 1);
-END;
-
--- Índices para TB_PRODUTOS
-CREATE INDEX IDX_PRODUTOS_OP ON TB_PRODUTOS(OP);
-CREATE INDEX IDX_PRODUTOS_GTIN ON TB_PRODUTOS(GTIN);
-CREATE UNIQUE INDEX IDX_PRODUTOS_OP_LOTE ON TB_PRODUTOS(OP, LOTE);
-
--- Tabela de Inspeções
-CREATE TABLE TB_INSPECOES (
-  ID_INSPECAO         INTEGER NOT NULL PRIMARY KEY,
-  ID_PRODUTO          INTEGER NOT NULL,
-  DATA_HORA           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CAMINHO_FOTO        VARCHAR(500) NOT NULL,
+-- Tabela nova e exclusiva para inspeções manuais deste projeto.
+CREATE TABLE TBINSPECAO_MANUAL (
+  INSPECAO_MANUAL_ID  INTEGER NOT NULL,
+  OP_ID               INTEGER,
+  OP                  VARCHAR(10),
+  ERP_PRODUTO         VARCHAR(10),
+  PRODUTO             VARCHAR(80),
+  LOTE                VARCHAR(10),
+  VALIDADE            DATE,
+  GTIN                VARCHAR(20),
+  REGISTRO_ANVISA     VARCHAR(20),
+  LINHAPRODUCAO_ID    INTEGER,
+  FASE                VARCHAR(10),
+  DATA                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CAMINHO_FOTO        VARCHAR(500),
   GTIN_CONFORME       SMALLINT,
   DATAMATRIX_CONFORME SMALLINT,
   LOTE_CONFORME       SMALLINT,
   VALIDADE_CONFORME   SMALLINT,
   OBSERVACOES         VARCHAR(1000),
-  USUARIO             VARCHAR(100),
+  USUARIO_ID          INTEGER,
+  USUARIO             VARCHAR(30),
   LOCALIZACAO         VARCHAR(200),
+  DELETADO            CHAR(1) DEFAULT 'N',
 
-  CONSTRAINT FK_INSP_PRODUTO FOREIGN KEY (ID_PRODUTO) REFERENCES TB_PRODUTOS(ID_PRODUTO)
+  CONSTRAINT PK_TBINSPECAO_MANUAL PRIMARY KEY (INSPECAO_MANUAL_ID),
+  CONSTRAINT FK_TBINSPMANUAL_OP FOREIGN KEY (OP_ID) REFERENCES TBOP(OP_ID),
+  CONSTRAINT FK_TBINSPMANUAL_LINHA FOREIGN KEY (LINHAPRODUCAO_ID) REFERENCES TBLINHA_PRODUCAO(LINHAPRODUCAO_ID)
 );
 
--- Generator para ID_INSPECAO
-CREATE GENERATOR GEN_TB_INSPECOES_ID;
-SET GENERATOR GEN_TB_INSPECOES_ID TO 0;
+-- Generator para INSPECAO_MANUAL_ID
+CREATE GENERATOR GEN_TBINSPECAO_MANUAL_ID;
+SET GENERATOR GEN_TBINSPECAO_MANUAL_ID TO 0;
 
--- Trigger para auto-incremento de ID_INSPECAO
-CREATE TRIGGER TRG_TB_INSPECOES_BI FOR TB_INSPECOES
+-- Trigger para auto-incremento de INSPECAO_MANUAL_ID
+SET TERM ^ ;
+
+CREATE TRIGGER TRG_TBINSPECAO_MANUAL_BI FOR TBINSPECAO_MANUAL
 ACTIVE BEFORE INSERT POSITION 0
 AS
 BEGIN
-  IF (NEW.ID_INSPECAO IS NULL) THEN
-    NEW.ID_INSPECAO = GEN_ID(GEN_TB_INSPECOES_ID, 1);
-END;
+  IF (NEW.INSPECAO_MANUAL_ID IS NULL) THEN
+    NEW.INSPECAO_MANUAL_ID = GEN_ID(GEN_TBINSPECAO_MANUAL_ID, 1);
+END^
 
--- Índices para TB_INSPECOES
-CREATE INDEX IDX_INSP_PRODUTO ON TB_INSPECOES(ID_PRODUTO);
-CREATE INDEX IDX_INSP_DATA_HORA ON TB_INSPECOES(DATA_HORA DESC);
-CREATE INDEX IDX_INSP_USUARIO ON TB_INSPECOES(USUARIO);
+SET TERM ; ^
+
+-- Índices para TBINSPECAO_MANUAL
+CREATE INDEX IDX_TBINSPMANUAL_OP ON TBINSPECAO_MANUAL(OP);
+CREATE INDEX IDX_TBINSPMANUAL_DATA ON TBINSPECAO_MANUAL(DATA DESC);
+CREATE INDEX IDX_TBINSPMANUAL_USUARIO ON TBINSPECAO_MANUAL(USUARIO);
+CREATE INDEX IDX_TBINSPMANUAL_LINHA ON TBINSPECAO_MANUAL(LINHAPRODUCAO_ID);
+CREATE INDEX IDX_TBINSPMANUAL_FASE ON TBINSPECAO_MANUAL(FASE);
+CREATE INDEX IDX_TBINSPMANUAL_DELETADO ON TBINSPECAO_MANUAL(DELETADO);
 
 COMMIT;
 ```

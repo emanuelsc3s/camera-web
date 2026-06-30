@@ -20,6 +20,8 @@ interface InspectionRecord {
   foto: string                   // Base64 data URL da imagem
   referenceData: ReferenceData   // Dados de referência do produto
   inspectionStates: InspectionStates  // Estados de conformidade
+  linhaProducaoId?: number    // Referência opcional à TBLINHA_PRODUCAO
+  fase?: string                // Fase da inspeção manual
   observacoes?: string           // Campo opcional (não implementado)
   usuario?: string               // Campo opcional (não implementado)
   localizacao?: string           // Campo opcional (não implementado)
@@ -36,6 +38,7 @@ interface ReferenceData {
   produto: string           // Nome completo do produto
   registroAnvisa: string    // Registro na ANVISA
   gtin: string              // Código GTIN do produto
+  linhaProducaoId?: number  // ID da linha em TBLINHA_PRODUCAO
 }
 ```
 
@@ -78,66 +81,126 @@ Arquivo atual: `src/services/storageService.ts`
 
 ## 3. Mapeamento para Firebird
 
+### 3.0 Metadados atuais usados como referência
+
+O DDL anexado foi gerado pelo IBExpert em **30/06/2026 08:47:13** para o banco `SYSVIEW.FDB`. Para esta integração:
+
+- A tabela antiga documentada como `TB_INSPECOES` passa a ser `TBINSPECAO_MANUAL`.
+- Este projeto persiste apenas inspeções manuais em `TBINSPECAO_MANUAL`.
+- A tabela `TBINSPECAO` já existe no banco atual, mas não será usada por este projeto; ela fica reservada para o registro de inspeções do projeto SICFAR.
+- A tabela `TBINSPECAO_CAM0` também pertence ao fluxo existente do banco e fica fora do escopo da inspeção manual.
+- A tabela de produtos em uso no projeto é `TBPRODUTOS`. O DDL anexado mostra a estrutura equivalente como `TBPRODUTO`; mantenha o nome operacional `TBPRODUTOS`.
+- Os dados de OP, lote, validade, GTIN e ANVISA aparecem no metadado atual em `TBOP`.
+- O campo `LINHAPRODUCAO_ID` da inspeção manual referencia `TBLINHA_PRODUCAO(LINHAPRODUCAO_ID)`.
+
 ### 3.1 Estrutura de Tabelas
 
-#### Tabela: `TB_PRODUTOS` (Dados de Referência)
+#### Tabela: `TBPRODUTOS` (Cadastro de Produtos)
 **Já deve existir no banco Firebird**
 
 ```sql
-CREATE TABLE TB_PRODUTOS (
-  ID_PRODUTO       INTEGER NOT NULL PRIMARY KEY,
-  OP               VARCHAR(50) NOT NULL,
-  LOTE             VARCHAR(50) NOT NULL,
-  VALIDADE         VARCHAR(10),
-  PRODUTO          VARCHAR(500) NOT NULL,
-  REGISTRO_ANVISA  VARCHAR(50),
-  GTIN             VARCHAR(14) NOT NULL,
-  DATA_CRIACAO     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- Estrutura de referência baseada no cadastro de produto do metadado atual.
+-- Não executar se a tabela TBPRODUTOS já existir no banco.
+CREATE TABLE TBPRODUTOS (
+  PRODUTO_ID        INTEGER NOT NULL PRIMARY KEY,
+  ERP_PRODUTO       VARCHAR(10),
+  PRODUTO           VARCHAR(80),
+  ARQUIVO_MENSAGEM  BLOB SUB_TYPE 0 SEGMENT SIZE 80,
+  MENSAGEM          VARCHAR(255),
+  DATA_INC          TIMESTAMP,
+  USUARIO_I         INTEGER,
+  USUARIONOME_I     VARCHAR(30),
+  DATA_ALT          TIMESTAMP,
+  USUARIO_A         INTEGER,
+  USUARIONOME_A     VARCHAR(30),
+  DATA_DEL          TIMESTAMP,
+  USUARIO_D         INTEGER,
+  USUARIONOME_D     VARCHAR(30),
+  DELETADO          CHAR(1)
 );
 
--- Índices para otimizar buscas
-CREATE INDEX IDX_PRODUTOS_OP ON TB_PRODUTOS(OP);
-CREATE INDEX IDX_PRODUTOS_GTIN ON TB_PRODUTOS(GTIN);
-CREATE UNIQUE INDEX IDX_PRODUTOS_OP_LOTE ON TB_PRODUTOS(OP, LOTE);
+CREATE INDEX IDX_TBPRODUTOS_ERP_PRODUTO ON TBPRODUTOS(ERP_PRODUTO);
+CREATE INDEX IDX_TBPRODUTOS_DELETADO ON TBPRODUTOS(DELETADO);
 ```
 
-#### Tabela: `TB_INSPECOES` (Registros de Inspeção)
+#### Tabela: `TBOP` (Ordem de Produção)
+**Existente no metadado atual e usada para buscar referência por OP**
+
+```sql
+-- Campos relevantes do metadado atual.
+CREATE TABLE TBOP (
+  OP_ID             INTEGER NOT NULL PRIMARY KEY,
+  OP                VARCHAR(10),
+  STATUS            VARCHAR(10) DEFAULT 'Aberto',
+  ERP_PRODUTO       VARCHAR(10),
+  PRODUTO           VARCHAR(80),
+  LOTE              VARCHAR(10),
+  VALIDADE          DATE,
+  GTIN              VARCHAR(20),
+  ANVISA            VARCHAR(20),
+  DOSSIE            VARCHAR(20),
+  DATA_INC          TIMESTAMP,
+  DELETADO          CHAR(10) DEFAULT 'N',
+  LINHAPRODUCAO_ID  INTEGER,
+  LINHAPRODUCAO     VARCHAR(50)
+);
+
+CREATE INDEX TBOP_LOTE ON TBOP(LOTE);
+```
+
+#### Tabela: `TBINSPECAO_MANUAL` (Registros de Inspeção)
 **Nova tabela a ser criada**
 
 ```sql
-CREATE TABLE TB_INSPECOES (
-  ID_INSPECAO         INTEGER NOT NULL PRIMARY KEY,
-  ID_PRODUTO          INTEGER NOT NULL,
-  DATA_HORA           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CAMINHO_FOTO        VARCHAR(500) NOT NULL,
+CREATE TABLE TBINSPECAO_MANUAL (
+  INSPECAO_MANUAL_ID  INTEGER NOT NULL,
+  OP_ID               INTEGER,
+  OP                  VARCHAR(10),
+  ERP_PRODUTO         VARCHAR(10),
+  PRODUTO             VARCHAR(80),
+  LOTE                VARCHAR(10),
+  VALIDADE            DATE,
+  GTIN                VARCHAR(20),
+  REGISTRO_ANVISA     VARCHAR(20),
+  LINHAPRODUCAO_ID    INTEGER,
+  FASE                VARCHAR(10),
+  DATA                TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CAMINHO_FOTO        VARCHAR(500),
   GTIN_CONFORME       SMALLINT,        -- 1 = conforme, 0 = não conforme, NULL = não marcado
   DATAMATRIX_CONFORME SMALLINT,
   LOTE_CONFORME       SMALLINT,
   VALIDADE_CONFORME   SMALLINT,
   OBSERVACOES         VARCHAR(1000),
-  USUARIO             VARCHAR(100),
+  USUARIO_ID          INTEGER,
+  USUARIO             VARCHAR(30),
   LOCALIZACAO         VARCHAR(200),
+  DELETADO            CHAR(1) DEFAULT 'N',
 
-  CONSTRAINT FK_INSP_PRODUTO FOREIGN KEY (ID_PRODUTO) REFERENCES TB_PRODUTOS(ID_PRODUTO)
+  CONSTRAINT PK_TBINSPECAO_MANUAL PRIMARY KEY (INSPECAO_MANUAL_ID),
+  CONSTRAINT FK_TBINSPMANUAL_OP FOREIGN KEY (OP_ID) REFERENCES TBOP(OP_ID),
+  CONSTRAINT FK_TBINSPMANUAL_LINHA FOREIGN KEY (LINHAPRODUCAO_ID) REFERENCES TBLINHA_PRODUCAO(LINHAPRODUCAO_ID)
 );
 
 -- Generator para auto-incremento
-CREATE GENERATOR GEN_TB_INSPECOES_ID;
-SET GENERATOR GEN_TB_INSPECOES_ID TO 0;
+CREATE GENERATOR GEN_TBINSPECAO_MANUAL_ID;
+SET GENERATOR GEN_TBINSPECAO_MANUAL_ID TO 0;
 
 -- Trigger para auto-incremento
-CREATE TRIGGER TRG_TB_INSPECOES_BI FOR TB_INSPECOES
+CREATE TRIGGER TRG_TBINSPECAO_MANUAL_BI FOR TBINSPECAO_MANUAL
 ACTIVE BEFORE INSERT POSITION 0
 AS
 BEGIN
-  IF (NEW.ID_INSPECAO IS NULL) THEN
-    NEW.ID_INSPECAO = GEN_ID(GEN_TB_INSPECOES_ID, 1);
+  IF (NEW.INSPECAO_MANUAL_ID IS NULL) THEN
+    NEW.INSPECAO_MANUAL_ID = GEN_ID(GEN_TBINSPECAO_MANUAL_ID, 1);
 END;
 
 -- Índices para otimizar buscas
-CREATE INDEX IDX_INSP_PRODUTO ON TB_INSPECOES(ID_PRODUTO);
-CREATE INDEX IDX_INSP_DATA_HORA ON TB_INSPECOES(DATA_HORA DESC);
-CREATE INDEX IDX_INSP_USUARIO ON TB_INSPECOES(USUARIO);
+CREATE INDEX IDX_TBINSPMANUAL_OP ON TBINSPECAO_MANUAL(OP);
+CREATE INDEX IDX_TBINSPMANUAL_DATA ON TBINSPECAO_MANUAL(DATA DESC);
+CREATE INDEX IDX_TBINSPMANUAL_USUARIO ON TBINSPECAO_MANUAL(USUARIO);
+CREATE INDEX IDX_TBINSPMANUAL_LINHA ON TBINSPECAO_MANUAL(LINHAPRODUCAO_ID);
+CREATE INDEX IDX_TBINSPMANUAL_FASE ON TBINSPECAO_MANUAL(FASE);
+CREATE INDEX IDX_TBINSPMANUAL_DELETADO ON TBINSPECAO_MANUAL(DELETADO);
 ```
 
 ### 3.2 Armazenamento de Fotos
@@ -146,8 +209,8 @@ As fotos atualmente são armazenadas como **Base64** no localStorage. No Firebir
 
 **Opção escolhida: Sistema de Arquivos**
 - Fotos salvas em: `/backend/uploads/fotos/YYYY/MM/DD/`
-- Formato do nome: `{ID_INSPECAO}_{timestamp}.jpg`
-- Caminho salvo no banco: `fotos/YYYY/MM/DD/{ID_INSPECAO}_{timestamp}.jpg`
+- Formato do nome: `{INSPECAO_MANUAL_ID}_{timestamp}.jpg`
+- Caminho salvo no banco: `fotos/YYYY/MM/DD/{INSPECAO_MANUAL_ID}_{timestamp}.jpg`
 
 **Estrutura de diretórios:**
 ```
@@ -218,6 +281,7 @@ backend/
     "registroAnvisa": "1.0234.5678",
     "gtin": "7891234567890"
   },
+  "fase": "Fase 1",
   "inspectionStates": {
     "gtin": true,
     "datamatrix": true,
@@ -230,28 +294,38 @@ backend/
 **Processamento no backend:**
 1. Decodificar Base64 da foto
 2. Salvar foto no sistema de arquivos
-3. Buscar ou criar produto em `TB_PRODUTOS`
-4. Inserir registro em `TB_INSPECOES`
+3. Buscar a OP em `TBOP` e complementar com `TBPRODUTOS` quando necessário
+4. Inserir o registro manual em `TBINSPECAO_MANUAL`
 5. Retornar ID da inspeção criada
 
 **SQL executado:**
 ```sql
--- 1. Buscar produto existente
-SELECT ID_PRODUTO FROM TB_PRODUTOS
-WHERE OP = ? AND LOTE = ?;
+-- 1. Buscar referência da OP no banco atual
+SELECT FIRST 1
+  o.OP_ID,
+  p.PRODUTO_ID,
+  o.OP,
+  o.ERP_PRODUTO,
+  o.LOTE,
+  o.VALIDADE,
+  COALESCE(o.PRODUTO, p.PRODUTO) AS PRODUTO,
+  o.ANVISA AS REGISTRO_ANVISA,
+  o.GTIN,
+  o.LINHAPRODUCAO_ID
+FROM TBOP o
+LEFT JOIN TBPRODUTOS p ON p.ERP_PRODUTO = o.ERP_PRODUTO
+WHERE o.OP = ?
+  AND COALESCE(o.DELETADO, 'N') = 'N'
+ORDER BY o.DATA_INC DESC;
 
--- 2. Se não existir, criar produto
-INSERT INTO TB_PRODUTOS (OP, LOTE, VALIDADE, PRODUTO, REGISTRO_ANVISA, GTIN)
-VALUES (?, ?, ?, ?, ?, ?)
-RETURNING ID_PRODUTO;
-
--- 3. Inserir inspeção
-INSERT INTO TB_INSPECOES (
-  ID_PRODUTO, DATA_HORA, CAMINHO_FOTO,
+-- 2. Inserir inspeção manual
+INSERT INTO TBINSPECAO_MANUAL (
+  OP_ID, OP, ERP_PRODUTO, PRODUTO, LOTE, VALIDADE, REGISTRO_ANVISA, GTIN,
+  LINHAPRODUCAO_ID, FASE, DATA, CAMINHO_FOTO,
   GTIN_CONFORME, DATAMATRIX_CONFORME, LOTE_CONFORME, VALIDADE_CONFORME
 )
-VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)
-RETURNING ID_INSPECAO;
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)
+RETURNING INSPECAO_MANUAL_ID;
 ```
 
 ### 5.2 Firebird → Frontend (Buscar Inspeções)
@@ -259,8 +333,8 @@ RETURNING ID_INSPECAO;
 **SQL executado:**
 ```sql
 SELECT
-  i.ID_INSPECAO,
-  i.DATA_HORA,
+  i.INSPECAO_MANUAL_ID,
+  i.DATA,
   i.CAMINHO_FOTO,
   i.GTIN_CONFORME,
   i.DATAMATRIX_CONFORME,
@@ -268,16 +342,18 @@ SELECT
   i.VALIDADE_CONFORME,
   i.OBSERVACOES,
   i.USUARIO,
-  p.OP,
-  p.LOTE,
-  p.VALIDADE,
-  p.PRODUTO,
-  p.REGISTRO_ANVISA,
-  p.GTIN
-FROM TB_INSPECOES i
-INNER JOIN TB_PRODUTOS p ON p.ID_PRODUTO = i.ID_PRODUTO
-ORDER BY i.DATA_HORA DESC
-LIMIT ? OFFSET ?;
+  i.OP,
+  i.LOTE,
+  i.VALIDADE,
+  i.PRODUTO,
+  i.REGISTRO_ANVISA,
+  i.GTIN,
+  i.LINHAPRODUCAO_ID,
+  i.FASE
+FROM TBINSPECAO_MANUAL i
+WHERE COALESCE(i.DELETADO, 'N') = 'N'
+ORDER BY i.DATA DESC
+ROWS ? TO ?;
 ```
 
 **Dados retornados para o frontend:**
@@ -297,6 +373,8 @@ LIMIT ? OFFSET ?;
         "registroAnvisa": "1.0234.5678",
         "gtin": "7891234567890"
       },
+      "linhaProducaoId": 1,
+      "fase": "Fase 1",
       "inspectionStates": {
         "gtin": true,
         "datamatrix": true,

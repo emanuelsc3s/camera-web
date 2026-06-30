@@ -89,14 +89,15 @@ CORS_ORIGIN=http://localhost:8080
 
 ---
 
-### 4️⃣ Backend - Criar Tabelas Firebird (30 min)
+### 4️⃣ Backend - Criar Tabela Manual Firebird (30 min)
 
 **Executar SQL** (usando isql, FlameRobin ou outro cliente):
 
 ```sql
 -- Script em 02-backend-setup-parte2.md seção 12.1
-CREATE TABLE TB_PRODUTOS (...);
-CREATE TABLE TB_INSPECOES (...);
+-- Pré-requisitos: TBOP e TBPRODUTOS já existem no banco.
+-- Não usar a tabela TBINSPECAO existente; ela é reservada ao SICFAR.
+CREATE TABLE TBINSPECAO_MANUAL (...);
 -- Generators, triggers, índices...
 ```
 
@@ -201,7 +202,8 @@ Ver detalhes em [05-deployment-options.md](./05-deployment-options.md#3-opção-
 ### Backend
 - [ ] Node.js >= 18 instalado
 - [ ] Firebird rodando e acessível
-- [ ] Tabelas criadas no banco
+- [ ] `TBINSPECAO_MANUAL` criada no banco
+- [ ] `TBOP` e `TBPRODUTOS` existentes e acessíveis
 - [ ] Dependências instaladas (`npm install`)
 - [ ] `.env` configurado
 - [ ] `server.js` implementado

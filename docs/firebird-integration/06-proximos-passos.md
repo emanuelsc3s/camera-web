@@ -6,7 +6,9 @@
 
 #### 1.1 Validar Estrutura do Banco ✅
 - [ ] Revisar documento `00-mapeamento-sistema-atual.md`
-- [ ] Verificar se tabelas TB_PRODUTOS e TB_INSPECOES já existem
+- [ ] Verificar se `TBOP` e `TBPRODUTOS` já existem e estão populadas no banco atual
+- [ ] Criar apenas a nova tabela `TBINSPECAO_MANUAL` para inspeções manuais deste projeto
+- [ ] Confirmar que a tabela `TBINSPECAO` existente permanecerá reservada para o projeto SICFAR
 - [ ] Ajustar nomes de campos se necessário
 - [ ] Validar tipos de dados
 - [ ] Verificar permissões do usuário Firebird

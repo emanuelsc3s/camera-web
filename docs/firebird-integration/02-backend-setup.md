@@ -312,28 +312,38 @@ module.exports = {
 
 ## 5. Serviços (Business Logic)
 
+Regra de persistência deste projeto: criar e consultar registros de inspeção somente em `TBINSPECAO_MANUAL`. A tabela `TBINSPECAO` já existe no banco, mas pertence ao projeto SICFAR e não deve ser usada por esta API.
+
 ### 5.1 Arquivo `src/services/produtos.service.js`
 
 ```javascript
 const db = require('../config/database');
 
 /**
- * Busca produto por OP
+ * Busca dados de referência por OP.
+ * Os campos OP, lote, validade, GTIN e ANVISA vêm de TBOP.
+ * TBPRODUTOS complementa o cadastro do produto via ERP_PRODUTO.
  */
 async function getProductByOP(op) {
   const sql = `
-    SELECT
-      ID_PRODUTO,
-      OP,
-      LOTE,
-      VALIDADE,
-      PRODUTO,
-      REGISTRO_ANVISA,
-      GTIN
-    FROM TB_PRODUTOS
-    WHERE OP = ?
-    ORDER BY DATA_CRIACAO DESC
-    LIMIT 1
+    SELECT FIRST 1
+      o.OP_ID,
+      p.PRODUTO_ID,
+      o.OP,
+      o.ERP_PRODUTO,
+      o.LOTE,
+      o.VALIDADE,
+      COALESCE(o.PRODUTO, p.PRODUTO) AS PRODUTO,
+      o.ANVISA AS REGISTRO_ANVISA,
+      o.GTIN,
+      o.LINHAPRODUCAO_ID,
+      o.DOSSIE,
+      o.STATUS
+    FROM TBOP o
+    LEFT JOIN TBPRODUTOS p ON p.ERP_PRODUTO = o.ERP_PRODUTO
+    WHERE o.OP = ?
+      AND COALESCE(o.DELETADO, 'N') = 'N'
+    ORDER BY o.DATA_INC DESC
   `;
 
   const result = await db.query(sql, [op]);
@@ -345,17 +355,25 @@ async function getProductByOP(op) {
  */
 async function getProductByOPAndLote(op, lote) {
   const sql = `
-    SELECT
-      ID_PRODUTO,
-      OP,
-      LOTE,
-      VALIDADE,
-      PRODUTO,
-      REGISTRO_ANVISA,
-      GTIN
-    FROM TB_PRODUTOS
-    WHERE OP = ? AND LOTE = ?
-    LIMIT 1
+    SELECT FIRST 1
+      o.OP_ID,
+      p.PRODUTO_ID,
+      o.OP,
+      o.ERP_PRODUTO,
+      o.LOTE,
+      o.VALIDADE,
+      COALESCE(o.PRODUTO, p.PRODUTO) AS PRODUTO,
+      o.ANVISA AS REGISTRO_ANVISA,
+      o.GTIN,
+      o.LINHAPRODUCAO_ID,
+      o.DOSSIE,
+      o.STATUS
+    FROM TBOP o
+    LEFT JOIN TBPRODUTOS p ON p.ERP_PRODUTO = o.ERP_PRODUTO
+    WHERE o.OP = ?
+      AND o.LOTE = ?
+      AND COALESCE(o.DELETADO, 'N') = 'N'
+    ORDER BY o.DATA_INC DESC
   `;
 
   const result = await db.query(sql, [op, lote]);
@@ -367,18 +385,24 @@ async function getProductByOPAndLote(op, lote) {
  */
 async function getProductByGTIN(gtin) {
   const sql = `
-    SELECT
-      ID_PRODUTO,
-      OP,
-      LOTE,
-      VALIDADE,
-      PRODUTO,
-      REGISTRO_ANVISA,
-      GTIN
-    FROM TB_PRODUTOS
-    WHERE GTIN = ?
-    ORDER BY DATA_CRIACAO DESC
-    LIMIT 1
+    SELECT FIRST 1
+      o.OP_ID,
+      p.PRODUTO_ID,
+      o.OP,
+      o.ERP_PRODUTO,
+      o.LOTE,
+      o.VALIDADE,
+      COALESCE(o.PRODUTO, p.PRODUTO) AS PRODUTO,
+      o.ANVISA AS REGISTRO_ANVISA,
+      o.GTIN,
+      o.LINHAPRODUCAO_ID,
+      o.DOSSIE,
+      o.STATUS
+    FROM TBOP o
+    LEFT JOIN TBPRODUTOS p ON p.ERP_PRODUTO = o.ERP_PRODUTO
+    WHERE o.GTIN = ?
+      AND COALESCE(o.DELETADO, 'N') = 'N'
+    ORDER BY o.DATA_INC DESC
   `;
 
   const result = await db.query(sql, [gtin]);
@@ -386,62 +410,55 @@ async function getProductByGTIN(gtin) {
 }
 
 /**
- * Cria ou atualiza produto
+ * Resolve a referência enviada pelo frontend.
+ * Se a OP existir em TBOP, usa os dados oficiais do banco.
+ * Caso contrário, mantém os dados enviados para permitir tratar o erro no controller.
  */
-async function createOrUpdateProduct(productData) {
-  const { op, lote, validade, produto, registroAnvisa, gtin } = productData;
-
-  // Verifica se produto já existe
-  const existing = await getProductByOPAndLote(op, lote);
+async function resolveReferenceData(referenceData) {
+  const existing = referenceData.lote
+    ? await getProductByOPAndLote(referenceData.op, referenceData.lote)
+    : await getProductByOP(referenceData.op);
 
   if (existing) {
-    // Atualiza produto existente (se necessário)
-    const sql = `
-      UPDATE TB_PRODUTOS
-      SET VALIDADE = ?,
-          PRODUTO = ?,
-          REGISTRO_ANVISA = ?,
-          GTIN = ?
-      WHERE ID_PRODUTO = ?
-    `;
-
-    await db.query(sql, [validade, produto, registroAnvisa, gtin, existing.ID_PRODUTO]);
-    return existing.ID_PRODUTO;
-  } else {
-    // Cria novo produto
-    const sql = `
-      INSERT INTO TB_PRODUTOS (OP, LOTE, VALIDADE, PRODUTO, REGISTRO_ANVISA, GTIN)
-      VALUES (?, ?, ?, ?, ?, ?)
-      RETURNING ID_PRODUTO
-    `;
-
-    const result = await db.query(sql, [op, lote, validade, produto, registroAnvisa, gtin]);
-    return result[0].ID_PRODUTO;
+    return existing;
   }
+
+  return {
+    OP_ID: null,
+    PRODUTO_ID: null,
+    OP: referenceData.op,
+    ERP_PRODUTO: null,
+    LOTE: referenceData.lote,
+    VALIDADE: referenceData.validade,
+    PRODUTO: referenceData.produto,
+    REGISTRO_ANVISA: referenceData.registroAnvisa,
+    GTIN: referenceData.gtin,
+    LINHAPRODUCAO_ID: referenceData.linhaProducaoId || null,
+  };
 }
 
 /**
- * Lista todos os produtos (com paginação)
+ * Lista produtos cadastrados em TBPRODUTOS.
  */
 async function getAllProducts(page = 1, limit = 50) {
-  const offset = (page - 1) * limit;
+  const start = (page - 1) * limit + 1;
+  const end = start + limit - 1;
 
   const sql = `
     SELECT
-      ID_PRODUTO,
-      OP,
-      LOTE,
-      VALIDADE,
+      PRODUTO_ID,
+      ERP_PRODUTO,
       PRODUTO,
-      REGISTRO_ANVISA,
-      GTIN,
-      DATA_CRIACAO
-    FROM TB_PRODUTOS
-    ORDER BY DATA_CRIACAO DESC
-    LIMIT ? OFFSET ?
+      MENSAGEM,
+      DATA_INC,
+      DELETADO
+    FROM TBPRODUTOS
+    WHERE COALESCE(DELETADO, 'N') = 'N'
+    ORDER BY PRODUTO
+    ROWS ? TO ?
   `;
 
-  const result = await db.query(sql, [limit, offset]);
+  const result = await db.query(sql, [start, end]);
   return result;
 }
 
@@ -449,7 +466,7 @@ module.exports = {
   getProductByOP,
   getProductByOPAndLote,
   getProductByGTIN,
-  createOrUpdateProduct,
+  resolveReferenceData,
   getAllProducts,
 };
 ```
@@ -558,16 +575,25 @@ const produtosService = require('./produtos.service');
  * Cria nova inspeção
  */
 async function createInspection(data) {
-  const { fotoBase64, referenceData, inspectionStates, observacoes, usuario } = data;
+  const { fotoBase64, referenceData, inspectionStates, observacoes, usuario, fase } = data;
 
   try {
-    // 1. Criar ou obter produto
-    const idProduto = await produtosService.createOrUpdateProduct(referenceData);
+    // 1. Resolver referência de OP/produto no banco atual
+    const opReference = await produtosService.resolveReferenceData(referenceData);
 
     // 2. Inserir inspeção (sem foto primeiro)
     const sqlInspection = `
-      INSERT INTO TB_INSPECOES (
-        ID_PRODUTO,
+      INSERT INTO TBINSPECAO_MANUAL (
+        OP_ID,
+        OP,
+        ERP_PRODUTO,
+        PRODUTO,
+        LOTE,
+        VALIDADE,
+        REGISTRO_ANVISA,
+        GTIN,
+        LINHAPRODUCAO_ID,
+        FASE,
         CAMINHO_FOTO,
         GTIN_CONFORME,
         DATAMATRIX_CONFORME,
@@ -576,14 +602,23 @@ async function createInspection(data) {
         OBSERVACOES,
         USUARIO
       )
-      VALUES (?, '', ?, ?, ?, ?, ?, ?)
-      RETURNING ID_INSPECAO
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?)
+      RETURNING INSPECAO_MANUAL_ID
     `;
 
     const conformeToInt = (value) => (value === true ? 1 : value === false ? 0 : null);
 
     const inspectionResult = await db.query(sqlInspection, [
-      idProduto,
+      opReference.OP_ID,
+      opReference.OP,
+      opReference.ERP_PRODUTO,
+      opReference.PRODUTO,
+      opReference.LOTE,
+      opReference.VALIDADE,
+      opReference.REGISTRO_ANVISA,
+      opReference.GTIN,
+      opReference.LINHAPRODUCAO_ID,
+      fase || null,
       conformeToInt(inspectionStates.gtin),
       conformeToInt(inspectionStates.datamatrix),
       conformeToInt(inspectionStates.lote),
@@ -592,16 +627,16 @@ async function createInspection(data) {
       usuario || null,
     ]);
 
-    const idInspecao = inspectionResult[0].ID_INSPECAO;
+    const idInspecao = inspectionResult[0].INSPECAO_MANUAL_ID;
 
     // 3. Salvar foto com ID da inspeção
     const photoPath = await fotosService.savePhotoFromBase64(fotoBase64, idInspecao);
 
     // 4. Atualizar caminho da foto na inspeção
     const sqlUpdatePhoto = `
-      UPDATE TB_INSPECOES
+      UPDATE TBINSPECAO_MANUAL
       SET CAMINHO_FOTO = ?
-      WHERE ID_INSPECAO = ?
+      WHERE INSPECAO_MANUAL_ID = ?
     `;
 
     await db.query(sqlUpdatePhoto, [photoPath, idInspecao]);
@@ -630,33 +665,44 @@ async function getInspections(filters = {}) {
   if (campo && termo) {
     switch (campo) {
       case 'op':
-        whereClause = 'WHERE p.OP LIKE ?';
+        whereClause = 'WHERE i.OP LIKE ?';
         params.push(`%${termo}%`);
         break;
       case 'lote':
-        whereClause = 'WHERE p.LOTE LIKE ?';
+        whereClause = 'WHERE i.LOTE LIKE ?';
         params.push(`%${termo}%`);
         break;
       case 'produto':
-        whereClause = 'WHERE p.PRODUTO LIKE ?';
+        whereClause = 'WHERE i.PRODUTO LIKE ?';
         params.push(`%${termo}%`);
         break;
       case 'gtin':
-        whereClause = 'WHERE p.GTIN LIKE ?';
+        whereClause = 'WHERE i.GTIN LIKE ?';
         params.push(`%${termo}%`);
         break;
       case 'usuario':
         whereClause = 'WHERE i.USUARIO LIKE ?';
         params.push(`%${termo}%`);
         break;
+      case 'fase':
+        whereClause = 'WHERE i.FASE LIKE ?';
+        params.push(`%${termo}%`);
+        break;
+      case 'linhaProducaoId':
+        whereClause = 'WHERE i.LINHAPRODUCAO_ID = ?';
+        params.push(Number(termo));
+        break;
     }
   }
 
   // Query principal
+  const start = offset + 1;
+  const end = offset + limit;
+
   const sql = `
     SELECT
-      i.ID_INSPECAO,
-      i.DATA_HORA,
+      i.INSPECAO_MANUAL_ID,
+      i.DATA,
       i.CAMINHO_FOTO,
       i.GTIN_CONFORME,
       i.DATAMATRIX_CONFORME,
@@ -664,28 +710,30 @@ async function getInspections(filters = {}) {
       i.VALIDADE_CONFORME,
       i.OBSERVACOES,
       i.USUARIO,
-      p.OP,
-      p.LOTE,
-      p.VALIDADE,
-      p.PRODUTO,
-      p.REGISTRO_ANVISA,
-      p.GTIN
-    FROM TB_INSPECOES i
-    INNER JOIN TB_PRODUTOS p ON p.ID_PRODUTO = i.ID_PRODUTO
+      i.OP,
+      i.LOTE,
+      i.VALIDADE,
+      i.PRODUTO,
+      i.REGISTRO_ANVISA,
+      i.GTIN,
+      i.LINHAPRODUCAO_ID,
+      i.FASE
+    FROM TBINSPECAO_MANUAL i
     ${whereClause}
-    ORDER BY i.DATA_HORA DESC
-    LIMIT ? OFFSET ?
+    ${whereClause ? 'AND' : 'WHERE'} COALESCE(i.DELETADO, 'N') = 'N'
+    ORDER BY i.DATA DESC
+    ROWS ? TO ?
   `;
 
-  const queryParams = [...params, limit, offset];
+  const queryParams = [...params, start, end];
   const result = await db.query(sql, queryParams);
 
   // Query para total de registros
   const sqlCount = `
     SELECT COUNT(*) as TOTAL
-    FROM TB_INSPECOES i
-    INNER JOIN TB_PRODUTOS p ON p.ID_PRODUTO = i.ID_PRODUTO
+    FROM TBINSPECAO_MANUAL i
     ${whereClause}
+    ${whereClause ? 'AND' : 'WHERE'} COALESCE(i.DELETADO, 'N') = 'N'
   `;
 
   const countResult = await db.query(sqlCount, params);
@@ -706,8 +754,8 @@ async function getInspections(filters = {}) {
 async function getInspectionById(id) {
   const sql = `
     SELECT
-      i.ID_INSPECAO,
-      i.DATA_HORA,
+      i.INSPECAO_MANUAL_ID,
+      i.DATA,
       i.CAMINHO_FOTO,
       i.GTIN_CONFORME,
       i.DATAMATRIX_CONFORME,
@@ -715,15 +763,17 @@ async function getInspectionById(id) {
       i.VALIDADE_CONFORME,
       i.OBSERVACOES,
       i.USUARIO,
-      p.OP,
-      p.LOTE,
-      p.VALIDADE,
-      p.PRODUTO,
-      p.REGISTRO_ANVISA,
-      p.GTIN
-    FROM TB_INSPECOES i
-    INNER JOIN TB_PRODUTOS p ON p.ID_PRODUTO = i.ID_PRODUTO
-    WHERE i.ID_INSPECAO = ?
+      i.OP,
+      i.LOTE,
+      i.VALIDADE,
+      i.PRODUTO,
+      i.REGISTRO_ANVISA,
+      i.GTIN,
+      i.LINHAPRODUCAO_ID,
+      i.FASE
+    FROM TBINSPECAO_MANUAL i
+    WHERE i.INSPECAO_MANUAL_ID = ?
+      AND COALESCE(i.DELETADO, 'N') = 'N'
   `;
 
   const result = await db.query(sql, [id]);
@@ -742,7 +792,7 @@ async function deleteInspection(id) {
   }
 
   // Deleta registro do banco
-  const sql = 'DELETE FROM TB_INSPECOES WHERE ID_INSPECAO = ?';
+  const sql = 'DELETE FROM TBINSPECAO_MANUAL WHERE INSPECAO_MANUAL_ID = ?';
   await db.query(sql, [id]);
 
   // Deleta foto do sistema de arquivos
@@ -758,7 +808,7 @@ async function deleteInspection(id) {
  * Deleta múltiplas inspeções
  */
 async function deleteMultipleInspections(ids) {
-  const deletedCount = 0;
+  let deletedCount = 0;
 
   for (const id of ids) {
     try {
@@ -782,9 +832,9 @@ function formatInspectionRecord(record) {
   const intToConforme = (value) => (value === 1 ? true : value === 0 ? false : null);
 
   return {
-    id: String(record.ID_INSPECAO),
-    timestamp: new Date(record.DATA_HORA).getTime(),
-    dataHora: formatDateTime(new Date(record.DATA_HORA)),
+    id: String(record.INSPECAO_MANUAL_ID),
+    timestamp: new Date(record.DATA).getTime(),
+    dataHora: formatDateTime(new Date(record.DATA)),
     foto: `/api/fotos/${record.CAMINHO_FOTO}`,
     referenceData: {
       op: record.OP,
@@ -794,6 +844,8 @@ function formatInspectionRecord(record) {
       registroAnvisa: record.REGISTRO_ANVISA,
       gtin: record.GTIN,
     },
+    linhaProducaoId: record.LINHAPRODUCAO_ID,
+    fase: record.FASE,
     inspectionStates: {
       gtin: intToConforme(record.GTIN_CONFORME),
       datamatrix: intToConforme(record.DATAMATRIX_CONFORME),

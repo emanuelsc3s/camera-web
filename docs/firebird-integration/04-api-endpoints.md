@@ -29,7 +29,7 @@ Verifica a saúde da API.
 
 ### 2.1 GET `/produtos/:op`
 
-Busca produto por OP (Ordem de Produção).
+Busca dados de referência por OP (Ordem de Produção). A consulta usa `TBOP` como fonte principal e complementa o nome do produto via `TBPRODUTOS` quando necessário.
 
 **Parâmetros:**
 - `op` (path) - OP do produto
@@ -42,7 +42,8 @@ Busca produto por OP (Ordem de Produção).
   "validade": "12/2025",
   "produto": "Medicamento XYZ 500mg - Caixa com 30 comprimidos",
   "registroAnvisa": "1.0234.5678",
-  "gtin": "7891234567890"
+  "gtin": "7891234567890",
+  "linhaProducaoId": 1
 }
 ```
 
@@ -57,7 +58,7 @@ Busca produto por OP (Ordem de Produção).
 
 ### 2.2 GET `/produtos/gtin/:gtin`
 
-Busca produto por código GTIN.
+Busca dados de referência por código GTIN. A consulta usa `TBOP.GTIN` e complementa o cadastro via `TBPRODUTOS`.
 
 **Parâmetros:**
 - `gtin` (path) - Código GTIN do produto
@@ -70,7 +71,8 @@ Busca produto por código GTIN.
   "validade": "12/2025",
   "produto": "Medicamento XYZ 500mg",
   "registroAnvisa": "1.0234.5678",
-  "gtin": "7891234567890"
+  "gtin": "7891234567890",
+  "linhaProducaoId": 1
 }
 ```
 
@@ -78,7 +80,7 @@ Busca produto por código GTIN.
 
 ### 2.3 GET `/produtos`
 
-Lista todos os produtos com paginação.
+Lista produtos cadastrados em `TBPRODUTOS` com paginação.
 
 **Query Parameters:**
 - `page` (number, opcional) - Número da página (padrão: 1)
@@ -88,14 +90,12 @@ Lista todos os produtos com paginação.
 ```json
 [
   {
-    "ID_PRODUTO": 1,
-    "OP": "12345",
-    "LOTE": "L2024001",
-    "VALIDADE": "12/2025",
+    "PRODUTO_ID": 1,
+    "ERP_PRODUTO": "001234",
     "PRODUTO": "Medicamento XYZ 500mg",
-    "REGISTRO_ANVISA": "1.0234.5678",
-    "GTIN": "7891234567890",
-    "DATA_CRIACAO": "2025-11-04T10:00:00.000Z"
+    "MENSAGEM": "Texto cadastrado para impressão",
+    "DATA_INC": "2025-11-04T10:00:00.000Z",
+    "DELETADO": "N"
   }
 ]
 ```
@@ -103,6 +103,8 @@ Lista todos os produtos com paginação.
 ---
 
 ## 3. Inspeções
+
+Todas as inspeções criadas por este projeto são persistidas em `TBINSPECAO_MANUAL`. A tabela `TBINSPECAO` existente não é usada por esta API, pois permanece reservada ao projeto SICFAR.
 
 ### 3.1 POST `/inspecoes`
 
@@ -126,6 +128,7 @@ Cria nova inspeção.
     "lote": false,
     "validade": true
   },
+  "fase": "Fase 1",
   "observacoes": "Lote com falha na impressão",
   "usuario": "João Silva"
 }
@@ -159,7 +162,7 @@ Lista inspeções com paginação e filtros.
 **Query Parameters:**
 - `page` (number, opcional) - Número da página (padrão: 1)
 - `limit` (number, opcional) - Registros por página (padrão: 10)
-- `campo` (string, opcional) - Campo para filtrar: 'op', 'lote', 'produto', 'gtin', 'usuario'
+- `campo` (string, opcional) - Campo para filtrar: 'op', 'lote', 'produto', 'gtin', 'usuario', 'fase', 'linhaProducaoId'
 - `termo` (string, opcional) - Termo de busca
 
 **Exemplos:**
@@ -168,6 +171,8 @@ GET /api/inspecoes?page=1&limit=10
 GET /api/inspecoes?page=2&limit=25
 GET /api/inspecoes?campo=op&termo=12345
 GET /api/inspecoes?campo=usuario&termo=João
+GET /api/inspecoes?campo=fase&termo=Fase%201
+GET /api/inspecoes?campo=linhaProducaoId&termo=1
 ```
 
 **Response 200 OK:**
@@ -193,6 +198,8 @@ GET /api/inspecoes?campo=usuario&termo=João
         "lote": false,
         "validade": true
       },
+      "linhaProducaoId": 1,
+      "fase": "Fase 1",
       "observacoes": "Lote com falha na impressão",
       "usuario": "João Silva"
     }
@@ -234,6 +241,8 @@ Busca inspeção específica por ID.
     "lote": false,
     "validade": true
   },
+  "linhaProducaoId": 1,
+  "fase": "Fase 1",
   "observacoes": null,
   "usuario": null
 }
@@ -312,7 +321,9 @@ Exporta todas as inspeções como JSON.
     "dataHora": "05/11/2025 14:32:03",
     "foto": "/api/fotos/2025/11/05/1_1730745123456.jpg",
     "referenceData": { },
-    "inspectionStates": { }
+    "inspectionStates": { },
+    "linhaProducaoId": 1,
+    "fase": "Fase 1"
   }
 ]
 ```
@@ -436,7 +447,8 @@ curl -X POST http://localhost:8000/api/inspecoes \
       "datamatrix": true,
       "lote": false,
       "validade": true
-    }
+    },
+    "fase": "Fase 1"
   }'
 ```
 
