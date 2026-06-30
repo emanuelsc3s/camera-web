@@ -28,4 +28,14 @@ curl http://127.0.0.1:8000/api/health
 
 O endpoint retorna `200` quando a API e o ping Firebird estao OK. Se o banco nao estiver configurado ou estiver inacessivel, retorna `503` com erro controlado.
 
-Esta fase nao implementa produtos, inspecoes, fotos nem Face ID.
+## Produtos
+
+```bash
+curl http://127.0.0.1:8000/api/produtos/12345
+curl http://127.0.0.1:8000/api/produtos/gtin/7891234567890
+curl "http://127.0.0.1:8000/api/produtos?page=1&limit=50"
+```
+
+Os endpoints de produtos consultam somente `TBOP` e `TBPRODUTO`.
+
+Esta fase não implementa inspeções, fotos nem Face ID.

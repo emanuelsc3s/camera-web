@@ -9,6 +9,8 @@ class FirebirdConfigError extends Error {
     super(message);
     this.name = 'FirebirdConfigError';
     this.code = 'FIREBIRD_CONFIG_INVALIDA';
+    this.status = 503;
+    this.expose = true;
   }
 }
 
