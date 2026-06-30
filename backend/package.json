@@ -1,0 +1,33 @@
+{
+  "name": "camera-web-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend API para o sistema Camera Web com Firebird 2.5.",
+  "main": "server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "test:connection": "node scripts/test-connection.js"
+  },
+  "keywords": [
+    "camera-web",
+    "express",
+    "firebird"
+  ],
+  "license": "UNLICENSED",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^4.22.2",
+    "helmet": "^8.2.0",
+    "morgan": "^1.11.0",
+    "node-firebird": "^2.3.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
