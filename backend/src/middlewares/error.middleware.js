@@ -2,6 +2,7 @@ function errorMiddleware(erro, req, res, next) {
   const status = erro.status || erro.statusCode || 500;
   const expose = erro.expose === true || status < 500;
   const payload = {
+    success: false,
     error: expose ? erro.message : 'Erro interno do servidor.',
   };
 

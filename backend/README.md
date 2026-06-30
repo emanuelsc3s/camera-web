@@ -17,8 +17,14 @@ npm install
 ```bash
 npm run dev
 npm start
+npm test
+npm run test:unit
+npm run test:e2e
+npm run check:schema
 npm run test:connection
 ```
+
+`check:schema` é somente leitura: ele valida metadados esperados no Firebird e não aplica migrations.
 
 ## Health
 
@@ -38,4 +44,23 @@ curl "http://127.0.0.1:8000/api/produtos?page=1&limit=50"
 
 Os endpoints de produtos consultam somente `TBOP` e `TBPRODUTO`.
 
-Esta fase não implementa inspeções, fotos nem Face ID.
+## Inspeções Manuais
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/inspecoes
+curl http://127.0.0.1:8000/api/inspecoes
+curl http://127.0.0.1:8000/api/inspecoes/1
+curl http://127.0.0.1:8000/api/inspecoes/export/json
+```
+
+As inspeções gravam somente em `TBINSPECAO_MANUAL`, usando `INSPECAOMANUAL_ID`, exclusão lógica e fotos de evidência em `UPLOAD_DIR`.
+
+## Face ID
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/face-id/register
+curl -X POST http://127.0.0.1:8000/api/face-id/authenticate
+curl http://127.0.0.1:8000/api/face-id/users
+```
+
+O Face ID é descriptor-only: o backend rejeita foto/base64 no payload, grava apenas `DESCRIPTOR_FACIAL` em `TBUSUARIO_FACEID`, audita eventos em `TBACESSO` e usa `TBUSUARIO.FAILED_ATTEMPTS` para controle de bloqueio.

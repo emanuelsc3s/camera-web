@@ -16,7 +16,10 @@ app.use(helmet());
 app.use(corsMiddleware);
 app.use(express.json({ limit: env.requestBodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: env.requestBodyLimit }));
-app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
+
+if (env.nodeEnv !== 'test') {
+  app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
+}
 
 app.get('/', (req, res) => {
   res.json({
@@ -25,6 +28,7 @@ app.get('/', (req, res) => {
     status: 'online',
     endpoints: {
       health: `${env.apiPrefix}/health`,
+      faceId: `${env.apiPrefix}/face-id`,
       inspecoes: `${env.apiPrefix}/inspecoes`,
       fotos: `${env.apiPrefix}/fotos`,
       produtos: `${env.apiPrefix}/produtos`,

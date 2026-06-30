@@ -16,14 +16,38 @@ function badRequest(message, details) {
   });
 }
 
+function conflict(message, details) {
+  return new HttpError(409, message, {
+    code: 'CONFLITO',
+    details,
+  });
+}
+
+function forbidden(message, details) {
+  return new HttpError(403, message, {
+    code: 'ACESSO_NEGADO',
+    details,
+  });
+}
+
 function notFound(message) {
   return new HttpError(404, message, {
     code: 'NAO_ENCONTRADO',
   });
 }
 
+function tooManyRequests(message, details) {
+  return new HttpError(429, message, {
+    code: 'MUITAS_REQUISICOES',
+    details,
+  });
+}
+
 module.exports = {
   HttpError,
   badRequest,
+  conflict,
+  forbidden,
   notFound,
+  tooManyRequests,
 };

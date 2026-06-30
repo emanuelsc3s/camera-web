@@ -77,9 +77,71 @@ function runQueryOn(db, sql, params = []) {
         return;
       }
 
-      resolve(resultado);
+      materializeBlobRows(resultado, db)
+        .then(resolve)
+        .catch(reject);
     });
   });
+}
+
+function readBlobValue(value, executor) {
+  if (typeof value !== 'function') {
+    return Promise.resolve(value);
+  }
+
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let chunksLength = 0;
+
+    const onBlobReady = (erro, name, stream) => {
+      if (erro) {
+        reject(erro);
+        return;
+      }
+
+      if (!stream) {
+        resolve(null);
+        return;
+      }
+
+      stream.on('data', (chunk) => {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        chunksLength += buffer.length;
+        chunks.push(buffer);
+      });
+      stream.on('end', () => resolve(Buffer.concat(chunks, chunksLength)));
+      stream.on('error', reject);
+    };
+
+    try {
+      if (executor && executor.constructor && executor.constructor.name === 'Transaction') {
+        value(executor, onBlobReady);
+        return;
+      }
+
+      value(onBlobReady);
+    } catch (erro) {
+      reject(erro);
+    }
+  });
+}
+
+async function materializeBlobRows(resultado, executor) {
+  if (!Array.isArray(resultado)) {
+    return resultado;
+  }
+
+  for (const row of resultado) {
+    if (!row || typeof row !== 'object') {
+      continue;
+    }
+
+    for (const column of Object.keys(row)) {
+      row[column] = await readBlobValue(row[column], executor);
+    }
+  }
+
+  return resultado;
 }
 
 async function query(sql, params = []) {
