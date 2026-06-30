@@ -28,7 +28,7 @@ Este documento descreve as mudanças implementadas para garantir que o sistema f
 - Ambiente offline não conseguia acessar os modelos
 
 **Solução:**
-- ✅ Modelos baixados e armazenados em `public/models/` (~11 MB)
+- ✅ Modelos baixados e armazenados em `public/models/` (~11.2 MB)
 - ✅ `MODEL_URL` alterado de URL externa para `/models`
 - ✅ Biblioteca face-api.js baixada localmente em `public/face-api.min.js`
 - ✅ `index.html` atualizado para usar versão local
@@ -49,6 +49,9 @@ Este documento descreve as mudanças implementadas para garantir que o sistema f
 ```
 ✅ ssd_mobilenetv1_model-weights_manifest.json
 ✅ ssd_mobilenetv1_model-shard1                 (4.0 MB)
+✅ ssd_mobilenetv1_model-shard2                 (1.4 MB)
+✅ tiny_face_detector_model-weights_manifest.json
+✅ tiny_face_detector_model-shard1              (189 KB)
 ✅ face_landmark_68_model-weights_manifest.json
 ✅ face_landmark_68_model-shard1                (349 KB)
 ✅ face_recognition_model-weights_manifest.json
@@ -98,7 +101,7 @@ Este documento descreve as mudanças implementadas para garantir que o sistema f
 const MODEL_URL = '/models'
 
 await Promise.all([
-  faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+  faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
   faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
   faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
 ])
@@ -123,8 +126,8 @@ Para verificar se tudo está funcionando offline:
 |---------|---------|
 | Fontes Roboto (WOFF2) | ~82 KB |
 | Face-API.js | ~649 KB |
-| Modelos IA | ~11 MB |
-| **TOTAL** | **~11.7 MB** |
+| Modelos IA | ~11.2 MB |
+| **TOTAL** | **~11.9 MB** |
 
 ## 🔒 Garantias
 

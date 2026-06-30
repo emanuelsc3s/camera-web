@@ -4,16 +4,24 @@ Este diretório contém os modelos de IA necessários para o reconhecimento faci
 
 ## 📦 Modelos Incluídos
 
-### 1. SSD MobileNet V1 (Detecção de Rostos)
+### 1. Tiny Face Detector (Detecção Rápida de Rostos)
+- **Arquivos**:
+  - `tiny_face_detector_model-weights_manifest.json`
+  - `tiny_face_detector_model-shard1`
+- **Tamanho**: ~190 KB
+- **Função**: Detecta rostos com baixa latência no fluxo de login
+- **Características**: Modelo principal do Face ID por ser mais rápido em webcam
+
+### 2. SSD MobileNet V1 (Fallback de Detecção de Rostos)
 - **Arquivos**:
   - `ssd_mobilenetv1_model-weights_manifest.json`
   - `ssd_mobilenetv1_model-shard1`
   - `ssd_mobilenetv1_model-shard2`
 - **Tamanho**: ~5.4 MB
-- **Função**: Detecta rostos em imagens/vídeo
-- **Características**: Leve e rápido, otimizado para dispositivos móveis
+- **Função**: Detecta rostos em imagens/vídeo se o Tiny Face Detector não carregar
+- **Características**: Mais preciso, porém mais pesado para reconhecimento em tempo real
 
-### 2. Face Landmark 68 (Pontos Faciais)
+### 3. Face Landmark 68 (Pontos Faciais)
 - **Arquivos**:
   - `face_landmark_68_model-weights_manifest.json`
   - `face_landmark_68_model-shard1`
@@ -21,7 +29,7 @@ Este diretório contém os modelos de IA necessários para o reconhecimento faci
 - **Função**: Detecta 68 pontos de referência no rosto
 - **Uso**: Alinhamento facial, análise de expressões
 
-### 3. Face Recognition (Reconhecimento Facial)
+### 4. Face Recognition (Reconhecimento Facial)
 - **Arquivos**:
   - `face_recognition_model-weights_manifest.json`
   - `face_recognition_model-shard1`
@@ -38,7 +46,7 @@ Os modelos são carregados automaticamente pelo arquivo `src/lib/faceApiLoader.t
 const MODEL_URL = '/models'
 
 await Promise.all([
-  faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+  faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
   faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
   faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
 ])
@@ -46,7 +54,7 @@ await Promise.all([
 
 ## 📊 Tamanho Total
 
-- **Total**: ~11 MB
+- **Total**: ~11.2 MB
 - **Formato**: TensorFlow.js (JSON + Binary Shards)
 
 ## 🌐 Uso Offline

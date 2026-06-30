@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Webcam from 'react-webcam'
+import {
+  ensureCameraApiSupport,
+  getCameraErrorMessage,
+  isCameraApiUnsupportedError,
+} from '@/lib/cameraSupport'
 import { FACE_ID_DEFAULTS, type DetectionBox } from '@/types/faceId'
 
 interface FaceIdWebcamViewProps {
@@ -7,7 +12,7 @@ interface FaceIdWebcamViewProps {
   boxes?: DetectionBox[]
   isProcessing?: boolean
   onCapture?: (imageSrc: string) => void
-  onFrameProcess?: (video: HTMLVideoElement) => void
+  onFrameProcess?: (video: HTMLVideoElement) => void | Promise<void>
   onCameraError?: (message: string) => void
   onRetry?: () => void
 }
@@ -16,36 +21,17 @@ const CONSTRAINTS_CHAIN: MediaTrackConstraints[] = [
   {
     width: { ideal: FACE_ID_DEFAULTS.videoWidth },
     height: { ideal: FACE_ID_DEFAULTS.videoHeight },
-    frameRate: { ideal: 30 },
+    frameRate: { ideal: 15 },
     facingMode: 'user',
   },
   {
-    width: { ideal: 320 },
-    height: { ideal: 240 },
-    frameRate: { ideal: 15 },
+    width: { ideal: 240 },
+    height: { ideal: 180 },
+    frameRate: { ideal: 10 },
     facingMode: 'user',
   },
   {},
 ]
-
-const humanizeCameraError = (err: Error) => {
-  if ('name' in err) {
-    const name = (err as DOMException).name
-    if (name === 'NotAllowedError' || name === 'SecurityError') {
-      return 'Permissão de câmera negada ou bloqueada pelo navegador.'
-    }
-    if (name === 'NotReadableError') {
-      return 'Outro app ou aba está usando a câmera. Feche-o e tente novamente.'
-    }
-    if (name === 'OverconstrainedError') {
-      return 'A câmera não suporta a resolução solicitada.'
-    }
-    if (name === 'NotFoundError') {
-      return 'Nenhuma câmera foi encontrada.'
-    }
-  }
-  return 'Não foi possível acessar a câmera. Verifique permissões ou tente novamente.'
-}
 
 export function FaceIdWebcamView({
   mode,
@@ -56,14 +42,45 @@ export function FaceIdWebcamView({
   onCameraError,
   onRetry,
 }: FaceIdWebcamViewProps) {
+  const cameraSupport = ensureCameraApiSupport()
   const webcamRef = useRef<Webcam>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [cameraReady, setCameraReady] = useState(false)
   const [constraintsIndex, setConstraintsIndex] = useState(0)
   const [webcamKey, setWebcamKey] = useState(0)
-  const [cameraError, setCameraError] = useState<string | null>(null)
-  const [hasExhaustedFallbacks, setHasExhaustedFallbacks] = useState(false)
-  const stopRequestsRef = useRef(false)
+  const [cameraError, setCameraError] = useState<string | null>(() =>
+    cameraSupport.supported ? null : cameraSupport.message ?? null
+  )
+  const [hasExhaustedFallbacks, setHasExhaustedFallbacks] = useState(!cameraSupport.supported)
+  const stopRequestsRef = useRef(!cameraSupport.supported)
+  const boxesRef = useRef(boxes)
+  const modeRef = useRef(mode)
+  const onFrameProcessRef = useRef(onFrameProcess)
+  const lastFrameProcessTimeRef = useRef(0)
+  const isFrameProcessPendingRef = useRef(false)
+
+  useEffect(() => {
+    boxesRef.current = boxes
+  }, [boxes])
+
+  useEffect(() => {
+    modeRef.current = mode
+  }, [mode])
+
+  useEffect(() => {
+    onFrameProcessRef.current = onFrameProcess
+  }, [onFrameProcess])
+
+  useEffect(() => {
+    if (cameraSupport.supported) return
+
+    const message = cameraSupport.message ?? getCameraErrorMessage(new Error('getUserMedia is not implemented'))
+    setCameraReady(false)
+    setCameraError(message)
+    setHasExhaustedFallbacks(true)
+    stopRequestsRef.current = true
+    if (onCameraError) onCameraError(message)
+  }, [cameraSupport.message, cameraSupport.supported, onCameraError])
 
   const capture = useCallback(() => {
     const imageSrc = webcamRef.current?.getScreenshot()
@@ -84,10 +101,24 @@ export function FaceIdWebcamView({
           return
         }
 
-        if (mode === 'recognize' && onFrameProcess) {
-          Promise.resolve(onFrameProcess(video)).catch((error) => {
-            console.error('[FaceID] Erro ao processar frame da câmera', error)
-          })
+        const now = Date.now()
+        const shouldProcessFrame =
+          modeRef.current === 'recognize' &&
+          onFrameProcessRef.current &&
+          !isFrameProcessPendingRef.current &&
+          now - lastFrameProcessTimeRef.current >= FACE_ID_DEFAULTS.throttleMs
+
+        if (shouldProcessFrame && onFrameProcessRef.current) {
+          isFrameProcessPendingRef.current = true
+          lastFrameProcessTimeRef.current = now
+
+          Promise.resolve(onFrameProcessRef.current(video))
+            .catch((error) => {
+              console.error('[FaceID] Erro ao processar frame da câmera', error)
+            })
+            .finally(() => {
+              isFrameProcessPendingRef.current = false
+            })
         }
 
         const { videoWidth, videoHeight } = video
@@ -99,7 +130,7 @@ export function FaceIdWebcamView({
         const ctx = canvas.getContext('2d')
         if (ctx) {
           ctx.clearRect(0, 0, canvas.width, canvas.height)
-          const validBoxes = boxes.filter(
+          const validBoxes = boxesRef.current.filter(
             (box) =>
               Number.isFinite(box.x) &&
               Number.isFinite(box.y) &&
@@ -118,7 +149,7 @@ export function FaceIdWebcamView({
             ctx.fillRect(box.x, box.y - 24, labelWidth, 22)
 
             ctx.fillStyle = '#fff'
-            ctx.font = 'bold 14px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+            ctx.font = '700 14px Roboto, ui-sans-serif, system-ui, sans-serif'
             ctx.fillText(label, box.x + 4, box.y - 8)
           })
         }
@@ -128,14 +159,22 @@ export function FaceIdWebcamView({
 
     animationFrame = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(animationFrame)
-  }, [boxes, mode, onFrameProcess])
+  }, [])
 
   const handleMediaError = useCallback(
     (err: Error) => {
       console.error('[FaceID] Erro ao acessar câmera:', err)
       setCameraReady(false)
-      const message = humanizeCameraError(err)
+      const message = getCameraErrorMessage(err)
       setCameraError(message)
+
+      const unsupported = isCameraApiUnsupportedError(err) || !ensureCameraApiSupport().supported
+      if (unsupported) {
+        setHasExhaustedFallbacks(true)
+        stopRequestsRef.current = true
+        if (onCameraError) onCameraError(message)
+        return
+      }
 
       const nextIndex = constraintsIndex + 1
       if (nextIndex < CONSTRAINTS_CHAIN.length) {
@@ -145,19 +184,30 @@ export function FaceIdWebcamView({
         setHasExhaustedFallbacks(true)
         stopRequestsRef.current = true
       }
-      if (onCameraError) onCameraError(err.message)
+      if (onCameraError) onCameraError(message)
     },
     [constraintsIndex, onCameraError]
   )
 
   const handleRetry = useCallback(() => {
+    const support = ensureCameraApiSupport()
+    if (!support.supported) {
+      const message = support.message ?? getCameraErrorMessage(new Error('getUserMedia is not implemented'))
+      setCameraReady(false)
+      setCameraError(message)
+      setHasExhaustedFallbacks(true)
+      stopRequestsRef.current = true
+      if (onCameraError) onCameraError(message)
+      return
+    }
+
     stopRequestsRef.current = false
     setCameraError(null)
     setHasExhaustedFallbacks(false)
     setConstraintsIndex(0)
     setWebcamKey((key) => key + 1)
     if (onRetry) onRetry()
-  }, [onRetry])
+  }, [onCameraError, onRetry])
 
   return (
     <div className="relative w-full flex-1 min-h-[200px] overflow-hidden rounded-lg border bg-black shadow-sm">
@@ -167,23 +217,25 @@ export function FaceIdWebcamView({
         </div>
       )}
 
-      <Webcam
-        key={webcamKey}
-        ref={webcamRef}
-        audio={false}
-        mirrored
-        screenshotFormat="image/jpeg"
-        className="h-full w-full object-cover"
-        videoConstraints={CONSTRAINTS_CHAIN[constraintsIndex]}
-        onUserMedia={() => {
-          setCameraError(null)
-          setCameraReady(true)
-        }}
-        onUserMediaError={(err) => {
-          if (stopRequestsRef.current) return
-          handleMediaError(err as Error)
-        }}
-      />
+      {cameraSupport.supported && (
+        <Webcam
+          key={webcamKey}
+          ref={webcamRef}
+          audio={false}
+          mirrored
+          screenshotFormat="image/jpeg"
+          className="h-full w-full object-cover"
+          videoConstraints={CONSTRAINTS_CHAIN[constraintsIndex]}
+          onUserMedia={() => {
+            setCameraError(null)
+            setCameraReady(true)
+          }}
+          onUserMediaError={(err) => {
+            if (stopRequestsRef.current) return
+            handleMediaError(err as Error)
+          }}
+        />
+      )}
 
       <canvas
         ref={canvasRef}
@@ -212,7 +264,7 @@ export function FaceIdWebcamView({
           <div>
             {cameraError}{' '}
             {hasExhaustedFallbacks
-              ? 'Verifique se outro app/aba usa a câmera ou libere permissão nas configurações do site.'
+              ? 'Corrija o acesso e clique em tentar novamente.'
               : 'Conceda acesso à câmera e recarregue se necessário.'}
           </div>
           <div className="flex gap-2">

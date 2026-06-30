@@ -10,7 +10,6 @@ import {
   clearAllFaceIdUsers,
   deleteFaceIdUser,
   getAllFaceIdUsers,
-  getFaceIdUserById,
   initFaceIdDB,
   saveFaceIdUser,
 } from '@/services/faceIdStorageService'
@@ -36,6 +35,14 @@ export const useFaceId = () => {
   const lastProcessedTime = useRef<number>(0)
   const isProcessingFrame = useRef(false)
   const faceMatcher = useRef<FaceMatcher | null>(null)
+  const statusRef = useRef<RecognitionStatus>('idle')
+  const usersRef = useRef<FaceIdUser[]>([])
+  const userMapRef = useRef<Map<string, FaceIdUser>>(new Map())
+
+  const setRecognitionStatus = useCallback((newStatus: RecognitionStatus) => {
+    statusRef.current = newStatus
+    setStatus(newStatus)
+  }, [])
 
   useEffect(() => {
     const init = async () => {
@@ -60,6 +67,9 @@ export const useFaceId = () => {
   }, [])
 
   useEffect(() => {
+    usersRef.current = users
+    userMapRef.current = new Map(users.map((user) => [user.id, user]))
+
     if (users.length === 0) {
       faceMatcher.current = null
       return
@@ -70,20 +80,20 @@ export const useFaceId = () => {
 
   const switchMode = useCallback((newMode: FaceIdMode) => {
     setMode(newMode)
-    setStatus('idle')
+    setRecognitionStatus('idle')
     setDetectedBoxes([])
     setRecognizedUser(null)
-  }, [])
+  }, [setRecognitionStatus])
 
   const resetRecognition = useCallback(() => {
-    setStatus('idle')
+    setRecognitionStatus('idle')
     setDetectedBoxes([])
     setRecognizedUser(null)
-  }, [])
+  }, [setRecognitionStatus])
 
   const processRecognitionFrame = useCallback(
     async (video: HTMLVideoElement) => {
-      if (status === 'recognized') return
+      if (statusRef.current === 'recognized') return
 
       if (isProcessingFrame.current) return
 
@@ -91,9 +101,10 @@ export const useFaceId = () => {
       if (now - lastProcessedTime.current < FACE_ID_DEFAULTS.throttleMs) return
 
       const matcher = faceMatcher.current
-      if (!matcher || users.length === 0) {
+      const currentUsers = usersRef.current
+      if (!matcher || currentUsers.length === 0) {
         setDetectedBoxes([])
-        setStatus('idle')
+        setRecognitionStatus('idle')
         return
       }
 
@@ -101,8 +112,11 @@ export const useFaceId = () => {
       lastProcessedTime.current = now
 
       try {
-        setStatus('detecting')
-        const matches = await matchFaces(video, matcher, users)
+        if (statusRef.current !== 'detecting') {
+          setRecognitionStatus('detecting')
+        }
+
+        const matches = await matchFaces(video, matcher, currentUsers)
 
         const boxes: DetectionBox[] = matches.map((match) => ({
           x: match.x,
@@ -118,24 +132,24 @@ export const useFaceId = () => {
 
         const recognizedMatch = matches.find((m) => m.userId)
         if (recognizedMatch?.userId) {
-          const user = await getFaceIdUserById(recognizedMatch.userId)
+          const user = userMapRef.current.get(recognizedMatch.userId)
           if (user) {
             setRecognizedUser(user)
-            setStatus('recognized')
+            setRecognitionStatus('recognized')
             return
           }
         }
 
-        setStatus(matches.length > 0 ? 'unknown' : 'idle')
+        setRecognitionStatus(matches.length > 0 ? 'unknown' : 'idle')
       } catch (err) {
         console.error('[FaceID] Erro no processamento:', err)
-        setStatus('error')
+        setRecognitionStatus('error')
         setError('Erro ao processar reconhecimento')
       } finally {
         isProcessingFrame.current = false
       }
     },
-    [status, users]
+    [setRecognitionStatus]
   )
 
   const registerUser = useCallback(
@@ -158,12 +172,12 @@ export const useFaceId = () => {
       await saveFaceIdUser(newUser)
       setUsers((prev) => [...prev, newUser])
       setRecognizedUser(null)
-      setStatus('idle')
+      setRecognitionStatus('idle')
       setDetectedBoxes([])
       toast.success(`Usuário ${newUser.name} cadastrado com sucesso`)
       return newUser
     },
-    []
+    [setRecognitionStatus]
   )
 
   const removeUser = useCallback(async (id: string) => {
@@ -171,10 +185,10 @@ export const useFaceId = () => {
     setUsers((prev) => prev.filter((user) => user.id !== id))
     if (recognizedUser?.id === id) {
       setRecognizedUser(null)
-      setStatus('idle')
+      setRecognitionStatus('idle')
     }
     toast.success('Cadastro removido')
-  }, [recognizedUser])
+  }, [recognizedUser, setRecognitionStatus])
 
   const wipeUsers = useCallback(async () => {
     await clearAllFaceIdUsers()

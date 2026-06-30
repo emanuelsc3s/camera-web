@@ -1,4 +1,7 @@
-import { ensureFaceApiModelsLoaded } from '@/lib/faceApiLoader'
+import {
+  createFaceDetectionOptions,
+  ensureFaceApiModelsLoaded,
+} from '@/lib/faceApiLoader'
 import {
   FACE_ID_DEFAULTS,
   type FaceDetectionResult,
@@ -7,7 +10,6 @@ import {
 } from '@/types/faceId'
 import type {
   FaceDetectionBox,
-  FaceDetectionWithDescriptor,
   FaceMatcher,
   FaceMatcherResult,
   TensorFlowEngine,
@@ -46,8 +48,8 @@ export const detectSingleFace = async (
 
   try {
     const detection = await faceapi
-      .detectSingleFace(imageElement)
-      .withFaceLandmarks()
+      .detectSingleFace(imageElement, createFaceDetectionOptions())
+      .withFaceLandmarks(false)
       .withFaceDescriptor()
 
     if (!detection) return null
@@ -91,8 +93,8 @@ export const detectAllFaces = async (
 
   try {
     const detections = await faceapi
-      .detectAllFaces(videoElement)
-      .withFaceLandmarks()
+      .detectAllFaces(videoElement, createFaceDetectionOptions())
+      .withFaceLandmarks(false)
       .withFaceDescriptors()
 
     const validDetections = detections.filter((detection) => {
@@ -112,7 +114,7 @@ export const detectAllFaces = async (
         width: box.width,
         height: box.height,
         score: detection.detection.score,
-        descriptor: detection.descriptor,
+        descriptor: new Float32Array(detection.descriptor),
       }
     })
   } finally {
@@ -148,32 +150,26 @@ export const matchFaces = async (
   tfEngine?.startScope()
 
   try {
-    const detections = await faceapi
-      .detectAllFaces(videoElement)
-      .withFaceLandmarks()
-      .withFaceDescriptors()
+    const detection = await faceapi
+      .detectSingleFace(videoElement, createFaceDetectionOptions())
+      .withFaceLandmarks(false)
+      .withFaceDescriptor()
 
-    const validDetections = detections.filter((detection) => {
-      const { box } = detection.detection
-      const isValid = hasValidBox(box)
-      if (!isValid) {
-        console.warn('[FaceID] Box inválido descartado antes do FaceMatcher', box)
-      }
-      return isValid
-    })
+    if (!detection) return []
 
-    if (validDetections.length === 0) return []
+    const { box } = detection.detection
+    if (!hasValidBox(box)) {
+      console.warn('[FaceID] Box inválido descartado antes do FaceMatcher', box)
+      return []
+    }
 
-    const results = validDetections.map((detection) =>
-      faceMatcher.findBestMatch(detection.descriptor)
-    )
+    if (detection.detection.score < FACE_ID_DEFAULTS.minDetectionScore) return []
 
-    return results.map((result: FaceMatcherResult, index: number) => {
-      const detection: FaceDetectionWithDescriptor = validDetections[index]
-      const box = detection.detection.box
-      const matchedUser = users.find((user) => user.id === result.label)
+    const result: FaceMatcherResult = faceMatcher.findBestMatch(detection.descriptor)
+    const matchedUser = users.find((user) => user.id === result.label)
 
-      return {
+    return [
+      {
         x: box.x,
         y: box.y,
         width: box.width,
@@ -181,8 +177,8 @@ export const matchFaces = async (
         label: matchedUser ? matchedUser.name : 'unknown',
         distance: result.distance,
         userId: matchedUser?.id,
-      }
-    })
+      },
+    ]
   } finally {
     tfEngine?.endScope()
   }

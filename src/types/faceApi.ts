@@ -26,6 +26,32 @@ export interface FaceDetectionWithDescriptor {
   descriptor: Float32Array
 }
 
+export interface FaceDetectionOptions {
+  readonly _faceDetectionOptionsBrand?: never
+}
+
+export interface TinyFaceDetectorOptionsInput {
+  inputSize?: number
+  scoreThreshold?: number
+}
+
+export interface SsdMobilenetv1OptionsInput {
+  minConfidence?: number
+  maxResults?: number
+}
+
+export interface DetectSingleFaceTask {
+  withFaceLandmarks: (useTinyLandmarkNet?: boolean) => {
+    withFaceDescriptor: () => Promise<FaceDetectionWithDescriptor | null | undefined>
+  }
+}
+
+export interface DetectAllFacesTask {
+  withFaceLandmarks: (useTinyLandmarkNet?: boolean) => {
+    withFaceDescriptors: () => Promise<FaceDetectionWithDescriptor[]>
+  }
+}
+
 export interface FaceMatcherResult {
   toString: (withDistance?: boolean) => string
   label: string
@@ -44,10 +70,17 @@ export interface LabeledFaceDescriptors {
 export interface FaceApi {
   nets: {
     ssdMobilenetv1: FaceApiNet
+    tinyFaceDetector: FaceApiNet
     faceLandmark68Net: FaceApiNet
     faceRecognitionNet: FaceApiNet
   }
   tf?: TensorFlowNamespace
+  TinyFaceDetectorOptions: new (
+    options?: TinyFaceDetectorOptionsInput
+  ) => FaceDetectionOptions
+  SsdMobilenetv1Options: new (
+    options?: SsdMobilenetv1OptionsInput
+  ) => FaceDetectionOptions
   LabeledFaceDescriptors: new (
     label: string,
     descriptors: Float32Array[]
@@ -57,17 +90,11 @@ export interface FaceApi {
     threshold?: number
   ) => FaceMatcher
   detectSingleFace: (
-    input: HTMLImageElement | HTMLVideoElement
-  ) => {
-    withFaceLandmarks: () => {
-      withFaceDescriptor: () => Promise<FaceDetectionWithDescriptor | null>
-    }
-  }
+    input: HTMLImageElement | HTMLVideoElement,
+    options?: FaceDetectionOptions
+  ) => DetectSingleFaceTask
   detectAllFaces: (
-    input: HTMLVideoElement | HTMLImageElement
-  ) => {
-    withFaceLandmarks: () => {
-      withFaceDescriptors: () => Promise<FaceDetectionWithDescriptor[]>
-    }
-  }
+    input: HTMLVideoElement | HTMLImageElement,
+    options?: FaceDetectionOptions
+  ) => DetectAllFacesTask
 }

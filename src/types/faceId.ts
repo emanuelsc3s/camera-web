@@ -49,14 +49,16 @@ export interface FaceIdConfig {
   throttleMs: number
   videoWidth: number
   videoHeight: number
+  tinyInputSize: number
 }
 
 export const FACE_ID_DEFAULTS: FaceIdConfig = {
   matchThreshold: 0.6,
-  minDetectionScore: 0.8,
-  throttleMs: 225,
-  videoWidth: 640,
-  videoHeight: 480,
+  minDetectionScore: 0.6,
+  throttleMs: 150,
+  videoWidth: 320,
+  videoHeight: 240,
+  tinyInputSize: 320,
 }
 
 export const FACE_ID_AUTH_TOKEN = 'FACE_ID_AUTH'

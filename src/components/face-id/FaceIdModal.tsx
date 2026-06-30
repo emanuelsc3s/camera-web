@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { FaceIdRecognitionView } from '@/components/face-id/FaceIdRecognitionView'
 import { FaceIdRegisterForm } from '@/components/face-id/FaceIdRegisterForm'
 import { Button } from '@/components/ui/button'
+import { ensureCameraApiSupport, getCameraErrorMessage } from '@/lib/cameraSupport'
 import {
   Dialog,
   DialogContent,
@@ -37,36 +38,29 @@ export function FaceIdModal({ open, onOpenChange }: FaceIdModalProps) {
   } = useFaceId()
 
   const loggingRef = useRef(false)
-  const hasRequestedCameraRef = useRef(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isRequestingCamera, setIsRequestingCamera] = useState(false)
 
   const requestCameraPermission = useCallback(async () => {
+    const support = ensureCameraApiSupport()
+    if (!support.supported) {
+      setCameraError(support.message ?? getCameraErrorMessage(new Error('getUserMedia is not implemented')))
+      return
+    }
+
     try {
-      if (!navigator?.mediaDevices?.getUserMedia) {
-        setCameraError('Navegador não suporta acesso à câmera.')
-        return
-      }
       setIsRequestingCamera(true)
       setCameraError(null)
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
       stream.getTracks().forEach((track) => track.stop())
       setCameraError(null)
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Não foi possível acessar a câmera.'
-      setCameraError(message)
+      setCameraError(getCameraErrorMessage(err))
       return
     } finally {
       setIsRequestingCamera(false)
     }
   }, [])
-
-  const requestCameraOnce = useCallback(async () => {
-    if (hasRequestedCameraRef.current) return
-    await requestCameraPermission()
-    hasRequestedCameraRef.current = true
-  }, [requestCameraPermission])
 
   useEffect(() => {
     if (activeTab !== mode) {
@@ -81,12 +75,6 @@ export function FaceIdModal({ open, onOpenChange }: FaceIdModalProps) {
       setCameraError(null)
       }
   }, [open, resetRecognition])
-
-  useEffect(() => {
-    if (open) {
-      void requestCameraOnce()
-    }
-  }, [open, requestCameraOnce])
 
   useEffect(() => {
     const tryLogin = async () => {
@@ -198,10 +186,7 @@ export function FaceIdModal({ open, onOpenChange }: FaceIdModalProps) {
     {cameraError && (
       <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
         <AlertCircle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
-        <span>
-          {cameraError}. Verifique se o navegador não bloqueou a câmera para este site e tente
-          novamente.
-        </span>
+        <span>{cameraError}</span>
       </div>
     )}
   </DialogContent>

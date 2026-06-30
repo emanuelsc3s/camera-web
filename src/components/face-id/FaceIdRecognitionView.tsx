@@ -12,7 +12,7 @@ interface FaceIdRecognitionViewProps {
   recognizedUser: FaceIdUser | null
   usersCount: number
   isLoading: boolean
-  onFrameProcess: (video: HTMLVideoElement) => void
+  onFrameProcess: (video: HTMLVideoElement) => void | Promise<void>
   onReset: () => void
   onCameraError?: (message: string) => void
 }

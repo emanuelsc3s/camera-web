@@ -1,4 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import {
+  ensureCameraApiSupport,
+  getCameraErrorMessage,
+  isCameraApiUnsupportedError,
+} from '@/lib/cameraSupport'
 
 interface WebcamDevice {
   deviceId: string
@@ -112,6 +117,14 @@ export function useWebcam(): UseWebcamReturn {
 
   // Listar dispositivos de câmera disponíveis
   const getDevices = useCallback(async () => {
+    const support = ensureCameraApiSupport()
+    if (!support.supported) {
+      const message = support.message ?? getCameraErrorMessage(new Error('getUserMedia is not implemented'))
+      setDevices([])
+      setError(message)
+      return []
+    }
+
     try {
       debugLog('Listando dispositivos disponíveis...')
       const mediaDevices = await navigator.mediaDevices.enumerateDevices()
@@ -128,7 +141,7 @@ export function useWebcam(): UseWebcamReturn {
     } catch (err) {
       debugLog('Erro ao listar dispositivos:', err)
       console.error('Erro ao listar dispositivos:', err)
-      setError('Erro ao listar câmeras disponíveis')
+      setError(getCameraErrorMessage(err))
       return []
     }
   }, [debugLog])
@@ -381,6 +394,14 @@ export function useWebcam(): UseWebcamReturn {
     setError(null)
     resetAttemptLog()
 
+    const support = ensureCameraApiSupport()
+    if (!support.supported) {
+      setError(support.message ?? getCameraErrorMessage(new Error('getUserMedia is not implemented')))
+      setIsLoading(false)
+      cleanupStream()
+      return
+    }
+
     // Respeita preferência persistida quando nenhum deviceId é passado
     const desiredDeviceId = deviceId ?? selectedDeviceIdRef.current ?? undefined
 
@@ -527,16 +548,19 @@ export function useWebcam(): UseWebcamReturn {
       const attemptsText = attempts.length ? `\n\nTentativas realizadas:\n• ${attempts.slice(0, 8).join('\n• ')}` : ''
 
       if (error instanceof Error) {
-        switch (error.name) {
-          case 'NotAllowedError':
-            errorMessage = 'Acesso à webcam negado. Clique no ícone da câmera na barra de endereços e permita o acesso.'
-            break
-          case 'NotFoundError':
-            errorMessage = 'Nenhuma webcam encontrada. Verifique se há uma câmera conectada.'
-            break
-          case 'NotReadableError': {
-            const failingLabel = desiredDeviceId ? (devices.find(d => d.deviceId === desiredDeviceId)?.label || null) : null
-            errorMessage = `Não foi possível acessar a câmera${failingLabel ? ` (${failingLabel})` : ''} porque ela parece estar ocupada por outro aplicativo.
+        if (isCameraApiUnsupportedError(error) || !ensureCameraApiSupport().supported) {
+          errorMessage = getCameraErrorMessage(error)
+        } else {
+          switch (error.name) {
+            case 'NotAllowedError':
+              errorMessage = 'Acesso à webcam negado. Clique no ícone da câmera na barra de endereços e permita o acesso.'
+              break
+            case 'NotFoundError':
+              errorMessage = 'Nenhuma webcam encontrada. Verifique se há uma câmera conectada.'
+              break
+            case 'NotReadableError': {
+              const failingLabel = desiredDeviceId ? (devices.find(d => d.deviceId === desiredDeviceId)?.label || null) : null
+              errorMessage = `Não foi possível acessar a câmera${failingLabel ? ` (${failingLabel})` : ''} porque ela parece estar ocupada por outro aplicativo.
 
 Ações automáticas realizadas:
 • ${attempts.length ? attempts.join('\n• ') : 'Tentamos reestabelecer o acesso com diferentes configurações e dispositivos'}
@@ -545,14 +569,14 @@ O que você pode fazer agora:
 • ${devices.length > 1 ? 'Troque para outra câmera nas configurações (botão "Trocar câmera")' : 'Feche aplicativos que possam estar usando a câmera (Teams, Zoom, Skype, etc.)'}
 • Clique em "Tentar novamente"
 • Verifique as permissões do navegador (ícone da câmera na barra de endereços)`
-            break
-          }
-          case 'OverconstrainedError':
-            errorMessage = 'Configurações da câmera não suportadas. Tente uma câmera diferente.'
-            break
-          default:
-            if (error.message?.includes('Todas as tentativas') || error.message?.includes('Todas as câmeras')) {
-              errorMessage = `Todas as câmeras falharam.
+              break
+            }
+            case 'OverconstrainedError':
+              errorMessage = 'Configurações da câmera não suportadas. Tente uma câmera diferente.'
+              break
+            default:
+              if (error.message?.includes('Todas as tentativas') || error.message?.includes('Todas as câmeras')) {
+                errorMessage = `Todas as câmeras falharam.
 
 🔧 Verificações:
 • Certifique-se que nenhum outro app está usando a webcam
@@ -561,9 +585,10 @@ O que você pode fazer agora:
 • Verifique se a webcam funciona em outros aplicativos
 
 ${devices.length} câmera${devices.length > 1 ? 's' : ''} detectada${devices.length > 1 ? 's' : ''}${attemptsText}`
-            } else {
-              errorMessage = `Erro ao acessar webcam: ${error.message}${attemptsText}`
-            }
+              } else {
+                errorMessage = `Erro ao acessar webcam: ${error.message}${attemptsText}`
+              }
+          }
         }
       }
 
