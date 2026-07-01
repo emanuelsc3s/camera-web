@@ -34,30 +34,34 @@ Este conjunto de documentos descreve a implementação completa do sistema de re
 
 **Conteúdo:**
 - Tabela TBUSUARIO_FACEID (dados biométricos)
-  - Estrutura DDL completa
+  - Estrutura DDL atual já existente no banco
   - Generators e triggers
   - Índices para otimização
   - Descrição detalhada de campos
+- Tabela TBUSUARIO
+  - `MATRICULA` como fonte da matrícula do usuário
+  - `FAILED_ATTEMPTS` como controle de falhas
 - **Controle de Tentativas Falhas (TBUSUARIO.FAILED_ATTEMPTS)**
   - Incremento automático a cada falha
   - Reset automático após sucesso
   - Bloqueio após 10 tentativas
   - Queries de monitoramento e reset
-- Uso da tabela TBACESSO (existente) para auditoria
+- Auditoria de tentativas como integração opcional
   - Mapeamento de campos para eventos Face ID
   - Formato JSON do campo ATIVIDADE
   - Queries de auditoria e histórico
 - Queries úteis (cadastro, autenticação, histórico)
 - Política descriptor-only: foto não persistida
 - Considerações de performance
-- Scripts DDL completos para instalação
+- Consultas de validação do metadata atual
 
-**Quando usar:** Para criar as tabelas no Firebird e entender a estrutura de dados.
+**Quando usar:** Para validar o schema Firebird atual e entender a estrutura de dados.
 
 **Notas importantes:**
 - Não é necessário criar tabela adicional de tentativas
-- A tabela TBACESSO é usada para auditoria (histórico completo)
+- A DDL enviada não inclui `TBACESSO`; use essa auditoria somente se a tabela existir no metadata do cliente ou após migration específica
 - O campo TBUSUARIO.FAILED_ATTEMPTS é a fonte de verdade para contagem de falhas
+- `TBUSUARIO_FACEID` não possui `MATRICULA` nem `ATIVO`
 
 ---
 
@@ -114,15 +118,14 @@ Este conjunto de documentos descreve a implementação completa do sistema de re
 
 ## 🚀 Guia de Implementação Rápida
 
-### Passo 1: Criar Tabelas no Firebird
+### Passo 1: Validar Tabelas no Firebird
 
-Execute o script DDL completo do documento **08-face-id-database-schema.md** (Seção 7):
+Compare o metadata do banco com o documento **08-face-id-database-schema.md**:
 
 ```sql
--- Criar TBUSUARIO_FACEID
--- Criar generators e triggers
--- Criar índices
--- TBACESSO já existe e será usada para auditoria
+SELECT RDB$RELATION_NAME
+FROM RDB$RELATIONS
+WHERE RDB$RELATION_NAME IN ('TBUSUARIO', 'TBUSUARIO_FACEID', 'TBINSPECAO_MANUAL');
 ```
 
 ### Passo 2: Implementar Backend
@@ -214,8 +217,8 @@ const response = await fetch('/api/face-id/authenticate', {
        │                               │                             │
        │ Captura rosto                 │ Matching                    │
        │ Extrai descriptor             │ Criptografia                │ TBUSUARIO_FACEID
-       │ (128 floats)                  │ Rate limiting               │ TBACESSO (auditoria)
-       │                               │ Auditoria                   │
+       │ (128 floats)                  │ Rate limiting               │ TBUSUARIO
+       │                               │ Auditoria opcional          │
        │                               │                             │
        │                               ▼                             │
        │                        Sem persistência de foto             │
@@ -239,23 +242,24 @@ const response = await fetch('/api/face-id/authenticate', {
 
 ### Banco de Dados
 - Firebird 2.5 ou superior
-- Tabela TBUSUARIO existente
-- Tabela TBACESSO existente (para auditoria)
+- Tabela TBUSUARIO existente, com `MATRICULA` e `FAILED_ATTEMPTS`
+- Tabela TBUSUARIO_FACEID existente, sem `MATRICULA` e sem `ATIVO`
 - Todos os terminais apontando para o mesmo Firebird ou para uma rotina controlada de sincronização
 
 ---
 
 ## 📝 Checklist de Implementação
 
-- [ ] Criar tabela TBUSUARIO_FACEID no Firebird
-- [ ] Verificar existência da tabela TBACESSO (já deve existir)
+- [ ] Validar tabela TBUSUARIO_FACEID no Firebird
+- [ ] Validar que `MATRICULA` fica em `TBUSUARIO`
+- [ ] Verificar se há tabela de auditoria de acessos no metadata real antes de implementar logs em banco
 - [ ] Implementar utilitários de matemática vetorial
 - [ ] Implementar serviço principal de Face ID
-- [ ] Adaptar método de auditoria para usar TBACESSO
+- [ ] Adaptar método de auditoria ao metadata real do cliente
 - [ ] Criar controllers e rotas
 - [ ] Adicionar validações e rate limiting
 - [ ] Configurar execução local por `localhost`/`127.0.0.1` nos terminais
-- [ ] Implementar logs de auditoria via TBACESSO
+- [ ] Implementar logs de auditoria conforme tabela disponível ou nova migration aprovada
 - [ ] Adicionar termo de consentimento no frontend
 - [ ] Testar cadastro de Face ID
 - [ ] Testar autenticação facial

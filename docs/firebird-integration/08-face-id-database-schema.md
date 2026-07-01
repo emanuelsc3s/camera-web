@@ -1,963 +1,358 @@
-# Modelagem de Banco de Dados - Sistema Face ID (Firebird 2.5)
+# Modelagem de Banco de Dados - Face ID e Inspeção Manual (Firebird 2.5)
 
-## Introdução
+## Estado Atual do Banco
 
-Este documento define a estrutura de banco de dados necessária para suportar o sistema de reconhecimento facial (Face ID) no Firebird 2.5, considerando as limitações da versão e seguindo os padrões de nomenclatura e auditoria já estabelecidos no sistema.
+Este documento reflete a DDL enviada pelo cliente, gerada pelo IBExpert em:
+
+- `01/07/2026 09:47:46` para `TBUSUARIO`
+- `01/07/2026 09:48:53` para `TBUSUARIO_FACEID`
+- `01/07/2026 09:52:41` para `TBINSPECAO_MANUAL`
+
+As tabelas abaixo já existem no banco informado. Não recrie essas estruturas automaticamente no ambiente do cliente. Qualquer mudança estrutural deve virar uma migration SQL revisável em `docs/firebird-integration/migrations/`, com backup prévio e execução manual.
 
 ---
 
-## Visão Geral das Tabelas
+## 1. Resumo das Tabelas
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    TBUSUARIO (existente)                    │
-│  - USUARIO_ID (PK)                                          │
-│  - NOME, EMAIL, SENHA                                       │
-│  - FAILED_ATTEMPTS (INTEGER) ← Controle de falhas Face ID  │
-│  - Campos de auditoria padrão                               │
+│ TBUSUARIO                                                   │
+│ - USUARIO_ID (PK)                                           │
+│ - NOME, EMAIL, SENHA                                        │
+│ - MATRICULA                                                 │
+│ - FAILED_ATTEMPTS                                           │
+│ - BLOQUEADO, DELETADO                                       │
+│ - Auditoria padrão                                          │
 └──────────────────────┬──────────────────────────────────────┘
                        │ 1
                        │
                        │ N
 ┌──────────────────────┴──────────────────────────────────────┐
-│              TBUSUARIO_FACEID (nova)                        │
-│  - FACEID_ID (PK)                                           │
-│  - USUARIO_ID (FK) → TBUSUARIO                              │
-│  - DESCRIPTOR_FACIAL (BLOB) ← Vetor de 128 floats          │
-│  - Foto não persistida; usada só em memória no cadastro    │
-│  - MATRICULA (VARCHAR)                                      │
-│  - ATIVO (CHAR(1))                                          │
-│  - Campos de auditoria padrão                               │
+│ TBUSUARIO_FACEID                                            │
+│ - FACEID_ID (PK)                                            │
+│ - USUARIO_ID (FK -> TBUSUARIO.USUARIO_ID)                   │
+│ - DESCRIPTOR_FACIAL (BLOB SUB_TYPE 0 SEGMENT SIZE 512)      │
+│ - Auditoria padrão                                          │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│                    TBACESSO (existente)                     │
-│  - ACESSO_ID (PK)                                           │
-│  - USUARIO_ID (FK) → TBUSUARIO                              │
-│  - DATA (TIMESTAMP)                                         │
-│  - TIPO, LOCAL, ATIVIDADE                                   │
-│  - IP, COMPUTADOR                                           │
-│  - Usado para auditoria de tentativas de Face ID           │
+│ TBINSPECAO_MANUAL                                           │
+│ - INSPECAOMANUAL_ID (PK)                                    │
+│ - OP_ID (FK -> TBOP.OP_ID)                                  │
+│ - LINHAPRODUCAO_ID (FK -> TBLINHA_PRODUCAO)                 │
+│ - STATUS, FASE, DATA, CAMINHO_FOTO                          │
+│ - Campos de conformidade VARCHAR(3)                         │
+│ - DELETADO e auditoria padrão                               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Notas Importantes:**
-- A tabela **TBACESSO** é utilizada para **auditoria** (histórico completo de tentativas)
-- O campo **TBUSUARIO.FAILED_ATTEMPTS** é a **fonte de verdade** para contagem de falhas
-- A cada falha de autenticação facial: `FAILED_ATTEMPTS = FAILED_ATTEMPTS + 1`
-- A cada autenticação bem-sucedida: `FAILED_ATTEMPTS = 0`
+Pontos importantes da DDL atual:
+
+- `TBUSUARIO.MATRICULA` existe e deve ser a origem da matrícula do operador.
+- `TBUSUARIO_FACEID` não possui `MATRICULA`, `ATIVO` nem `DELETADO`.
+- `TBUSUARIO_FACEID` armazena apenas o descriptor biométrico e o vínculo opcional com `TBUSUARIO`.
+- O status operacional do usuário vem de `TBUSUARIO.BLOQUEADO`, `TBUSUARIO.DELETADO` e `TBUSUARIO.FAILED_ATTEMPTS`.
+- A DDL enviada não inclui `TBACESSO`; qualquer auditoria por tabela de acessos deve ser tratada como integração opcional ou nova migration, conforme o metadata real do cliente.
 
 ---
 
-## 1. Tabela TBUSUARIO_FACEID
+## 2. `TBUSUARIO`
 
-Armazena somente o template biométrico facial dos usuários. A foto capturada pela câmera é usada apenas em memória para gerar o descriptor e deve ser descartada após o cadastro/autenticação.
+### 2.1 Campos relevantes para Face ID
 
-### 1.1 Estrutura DDL
+| Campo | Tipo | Uso |
+|-------|------|-----|
+| `USUARIO_ID` | `INTEGER NOT NULL` | Chave primária e vínculo com `TBUSUARIO_FACEID` |
+| `NOME` | `VARCHAR(30)` | Nome exibido após autenticação |
+| `EMAIL` | `VARCHAR(100)` | Identificação auxiliar |
+| `MATRICULA` | `VARCHAR(30)` | Matrícula do usuário; não fica em `TBUSUARIO_FACEID` |
+| `FAILED_ATTEMPTS` | `INTEGER DEFAULT 0` | Contador de falhas consecutivas de autenticação |
+| `BLOQUEADO` | `VARCHAR(1) DEFAULT 'N'` | Bloqueio operacional do usuário |
+| `DELETADO` | `CHAR(1) DEFAULT 'N'` | Exclusão lógica do usuário |
+
+### 2.2 Regras de autenticação
+
+- A cada falha de autenticação facial, incrementar `TBUSUARIO.FAILED_ATTEMPTS`.
+- A cada sucesso, zerar `TBUSUARIO.FAILED_ATTEMPTS`.
+- Se `FAILED_ATTEMPTS` atingir o limite definido pela aplicação, bloquear pelo fluxo operacional do sistema, preferencialmente usando `BLOQUEADO = 'S'`.
+- Consultas de usuário ativo devem filtrar `COALESCE(DELETADO, 'N') = 'N'` e `COALESCE(BLOQUEADO, 'N') = 'N'`.
+
+Exemplo:
 
 ```sql
-CREATE TABLE TBUSUARIO_FACEID (
-    FACEID_ID           INTEGER NOT NULL,
-    USUARIO_ID          INTEGER,
+UPDATE TBUSUARIO
+SET FAILED_ATTEMPTS = COALESCE(FAILED_ATTEMPTS, 0) + 1
+WHERE USUARIO_ID = :USUARIO_ID;
 
-    -- Descriptor facial: vetor de 128 floats (512 bytes)
-    -- Usado para reconhecimento e matching facial
-    DESCRIPTOR_FACIAL   BLOB SUB_TYPE BINARY SEGMENT SIZE 512 NOT NULL,
-
-    MATRICULA           VARCHAR(30),
-    ATIVO               CHAR(1) DEFAULT 'S',
-
-    -- Campos de auditoria (padrão do sistema)
-    DATA_INC            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    USUARIO_I           INTEGER,
-    USUARIONOME_I       VARCHAR(30),
-    DATA_ALT            TIMESTAMP,
-    USUARIO_A           INTEGER,
-    USUARIONOME_A       VARCHAR(30),
-    DATA_DEL            TIMESTAMP,
-    USUARIO_D           INTEGER,
-    USUARIONOME_D       VARCHAR(30),
-
-    CONSTRAINT PK_TBUSUARIO_FACEID PRIMARY KEY (FACEID_ID),
-    CONSTRAINT FK_TBUSUARIO_FACEID FOREIGN KEY (USUARIO_ID)
-        REFERENCES TBUSUARIO(USUARIO_ID),
-    CONSTRAINT CHK_TBUSUARIO_FACEID_ATIVO CHECK (ATIVO IN ('S', 'N'))
-);
+UPDATE TBUSUARIO
+SET FAILED_ATTEMPTS = 0
+WHERE USUARIO_ID = :USUARIO_ID;
 ```
 
-### 1.2 Generators e Triggers
+---
+
+## 3. `TBUSUARIO_FACEID`
+
+### 3.1 DDL atual
 
 ```sql
--- Generator para auto-incremento
 CREATE GENERATOR GEN_TBUSUARIO_FACEID_ID;
-SET GENERATOR GEN_TBUSUARIO_FACEID_ID TO 0;
 
--- Trigger para auto-incremento do ID
-CREATE TRIGGER TRG_TBUSUARIO_FACEID_BI FOR TBUSUARIO_FACEID
+CREATE TABLE TBUSUARIO_FACEID (
+    FACEID_ID          INTEGER NOT NULL,
+    USUARIO_ID         INTEGER,
+    DESCRIPTOR_FACIAL  BLOB SUB_TYPE 0 SEGMENT SIZE 512 NOT NULL,
+    DATA_INC           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    USUARIO_I          INTEGER,
+    USUARIONOME_I      VARCHAR(30),
+    DATA_ALT           TIMESTAMP,
+    USUARIO_A          INTEGER,
+    USUARIONOME_A      VARCHAR(30),
+    DATA_DEL           TIMESTAMP,
+    USUARIO_D          INTEGER,
+    USUARIONOME_D      VARCHAR(30)
+);
+
+ALTER TABLE TBUSUARIO_FACEID ADD CONSTRAINT PK_TBUSUARIO_FACEID PRIMARY KEY (FACEID_ID)
+USING INDEX IDX_PK_TBUSUARIO_FACEID;
+
+ALTER TABLE TBUSUARIO_FACEID ADD CONSTRAINT FK_TBUSUARIO_FACEID
+FOREIGN KEY (USUARIO_ID) REFERENCES TBUSUARIO (USUARIO_ID)
+USING INDEX IDX_FACEID_USUARIO_ID;
+
+CREATE DESCENDING INDEX IDX_FACEID_DATA_INC ON TBUSUARIO_FACEID (DATA_INC);
+
+SET TERM ^ ;
+
+CREATE OR ALTER TRIGGER TRG_TBUSUARIO_FACEID_BI FOR TBUSUARIO_FACEID
 ACTIVE BEFORE INSERT POSITION 0
 AS
 BEGIN
-    IF (NEW.FACEID_ID IS NULL) THEN
-        NEW.FACEID_ID = GEN_ID(GEN_TBUSUARIO_FACEID_ID, 1);
-    
-    -- Define data de inclusão se não informada
-    IF (NEW.DATA_INC IS NULL) THEN
-        NEW.DATA_INC = CURRENT_TIMESTAMP;
-END;
+  IF (NEW.FACEID_ID IS NULL) THEN
+    NEW.FACEID_ID = GEN_ID(GEN_TBUSUARIO_FACEID_ID, 1);
 
--- Trigger para atualização (auditoria)
-CREATE TRIGGER TRG_TBUSUARIO_FACEID_BU FOR TBUSUARIO_FACEID
+  IF (NEW.DATA_INC IS NULL) THEN
+    NEW.DATA_INC = CURRENT_TIMESTAMP;
+END
+^
+
+CREATE OR ALTER TRIGGER TRG_TBUSUARIO_FACEID_BU FOR TBUSUARIO_FACEID
 ACTIVE BEFORE UPDATE POSITION 0
 AS
 BEGIN
-    NEW.DATA_ALT = CURRENT_TIMESTAMP;
-END;
+  NEW.DATA_ALT = CURRENT_TIMESTAMP;
+END
+^
+
+SET TERM ; ^
 ```
 
-### 1.3 Índices
+### 3.2 Campos
 
-```sql
--- Índice para busca por usuário
-CREATE INDEX IDX_FACEID_USUARIO_ID ON TBUSUARIO_FACEID(USUARIO_ID);
+| Campo | Tipo | Nulo | Descrição |
+|-------|------|------|-----------|
+| `FACEID_ID` | `INTEGER` | Não | Chave primária gerada por `GEN_TBUSUARIO_FACEID_ID` |
+| `USUARIO_ID` | `INTEGER` | Sim | FK para `TBUSUARIO.USUARIO_ID` |
+| `DESCRIPTOR_FACIAL` | `BLOB SUB_TYPE 0 SEGMENT SIZE 512` | Não | Vetor binário de 128 floats gerado pelo modelo facial |
+| `DATA_INC` | `TIMESTAMP DEFAULT CURRENT_TIMESTAMP` | Sim | Data de cadastro |
+| `USUARIO_I` | `INTEGER` | Sim | Usuário que cadastrou |
+| `USUARIONOME_I` | `VARCHAR(30)` | Sim | Nome do usuário que cadastrou |
+| `DATA_ALT` | `TIMESTAMP` | Sim | Atualizada por trigger em alterações |
+| `USUARIO_A` | `INTEGER` | Sim | Usuário que alterou |
+| `USUARIONOME_A` | `VARCHAR(30)` | Sim | Nome do usuário que alterou |
+| `DATA_DEL` | `TIMESTAMP` | Sim | Campo de auditoria disponível, sem flag de exclusão na DDL atual |
+| `USUARIO_D` | `INTEGER` | Sim | Usuário que solicitou remoção |
+| `USUARIONOME_D` | `VARCHAR(30)` | Sim | Nome do usuário que solicitou remoção |
 
--- Índice para busca por matrícula
-CREATE INDEX IDX_FACEID_MATRICULA ON TBUSUARIO_FACEID(MATRICULA);
+### 3.3 Regras de uso
 
--- Índice para filtrar apenas ativos
-CREATE INDEX IDX_FACEID_ATIVO ON TBUSUARIO_FACEID(ATIVO);
+- A foto capturada pela câmera não deve ser persistida; ela serve apenas para gerar o descriptor.
+- O backend deve gravar somente `DESCRIPTOR_FACIAL`, `USUARIO_ID` e auditoria.
+- Matrícula deve ser lida de `TBUSUARIO.MATRICULA`.
+- Como a tabela não tem `ATIVO` nem `DELETADO`, não documente exclusão lógica em `TBUSUARIO_FACEID`.
+- Se for necessário inativar Face ID mantendo histórico, crie uma nova migration para adicionar uma flag de exclusão lógica. Até lá, a remoção LGPD do dado biométrico deve remover o descriptor da tabela ou seguir o procedimento jurídico definido pelo cliente.
+- A DDL atual não define constraint `UNIQUE` por `USUARIO_ID`; se a regra de negócio exigir um único Face ID por usuário, a API deve validar antes de inserir ou uma nova migration deve criar a restrição.
 
--- Índice composto para busca de usuários ativos
-CREATE INDEX IDX_FACEID_USUARIO_ATIVO ON TBUSUARIO_FACEID(USUARIO_ID, ATIVO);
-```
+### 3.4 Consultas compatíveis
 
-### 1.4 Descrição dos Campos
+Buscar descriptors para autenticação:
 
-| Campo | Tipo | Tamanho | Nulo | Descrição |
-|-------|------|---------|------|-----------|
-| FACEID_ID | INTEGER | 4 bytes | NÃO | Chave primária (auto-incremento) |
-| USUARIO_ID | INTEGER | 4 bytes | SIM | FK para TBUSUARIO (pode ser NULL para cadastros sem vínculo) |
-| DESCRIPTOR_FACIAL | BLOB | 512 bytes | NÃO | Vetor de 128 floats (128 × 4 bytes) representando o descritor facial |
-| MATRICULA | VARCHAR(30) | 30 chars | SIM | Matrícula do funcionário (pode ser usada para login) |
-| ATIVO | CHAR(1) | 1 char | NÃO | 'S' = ativo, 'N' = inativo (soft delete) |
-| DATA_INC | TIMESTAMP | 8 bytes | NÃO | Data/hora de criação do registro |
-| USUARIO_I | INTEGER | 4 bytes | SIM | ID do usuário que criou o registro |
-| USUARIONOME_I | VARCHAR(30) | 30 chars | SIM | Nome do usuário que criou |
-| DATA_ALT | TIMESTAMP | 8 bytes | SIM | Data/hora da última alteração |
-| USUARIO_A | INTEGER | 4 bytes | SIM | ID do usuário que alterou |
-| USUARIONOME_A | VARCHAR(30) | 30 chars | SIM | Nome do usuário que alterou |
-| DATA_DEL | TIMESTAMP | 8 bytes | SIM | Data/hora da exclusão lógica |
-| USUARIO_D | INTEGER | 4 bytes | SIM | ID do usuário que excluiu |
-| USUARIONOME_D | VARCHAR(30) | 30 chars | SIM | Nome do usuário que excluiu |
-
-### 1.5 Observações Importantes
-
-**DESCRIPTOR_FACIAL (BLOB SUB_TYPE BINARY SEGMENT SIZE 512):**
-- Armazena o vetor de características faciais gerado pelo face-api.js
-- **NÃO é uma imagem**, é um array de 128 números decimais (floats)
-- Tamanho fixo: 128 floats × 4 bytes = **512 bytes**
-- Usado para reconhecimento e matching facial (cálculo de distância euclidiana)
-- Formato: Buffer binário de Float32Array
-
-**Política de foto:**
-- A foto capturada pela webcam não é persistida.
-- O frontend extrai o descriptor facial com face-api.js e envia apenas o vetor de 128 números ao backend.
-- O backend grava somente `DESCRIPTOR_FACIAL`, `MATRICULA`, vínculo com usuário e auditoria.
-- A rastreabilidade fica em `TBACESSO` com usuário, terminal/IP, data/hora, resultado, distância e confiança.
-- Se houver exigência futura de auditoria visual, criar uma decisão separada e explícita, porque foto de rosto aumenta muito o risco de exposição de dado biométrico sensível.
-
-**Por que SEGMENT SIZE 512 para DESCRIPTOR_FACIAL?**
-- Tamanho exato do descriptor: 512 bytes
-- Com SEGMENT SIZE 512: **1 segmento** (ideal)
-- Com SEGMENT SIZE 80 (padrão): **7 segmentos** (fragmentado)
-- Menos segmentos = melhor performance de leitura/escrita
-
-**Limitações do Firebird 2.5:**
-- Tamanho máximo de BLOB: 2GB
-- Não possui tipo ARRAY nativo (por isso usamos BLOB para o descriptor)
-- SEGMENT SIZE máximo: 32.767 bytes
-
----
-
-## 2. Controle de Tentativas Falhas (TBUSUARIO.FAILED_ATTEMPTS)
-
-### 2.1 Visão Geral
-
-O campo **FAILED_ATTEMPTS** da tabela **TBUSUARIO** é utilizado como **fonte de verdade** para controlar a quantidade de tentativas de autenticação por Face ID que falharam.
-
-**Comportamento:**
-- ✅ **Incrementar em 1** a cada falha de autenticação facial
-- ✅ **Zerar (0)** quando houver autenticação bem-sucedida
-- ✅ **Bloquear usuário** quando atingir threshold (ex: 10 tentativas)
-- ✅ **Resetar manualmente** quando necessário (suporte técnico)
-
-**Diferença entre FAILED_ATTEMPTS e TBACESSO:**
-- **TBUSUARIO.FAILED_ATTEMPTS**: Contador atual de falhas consecutivas (controle)
-- **TBACESSO**: Histórico completo de todas as tentativas (auditoria)
-
-### 2.2 Queries SQL para Controle de Tentativas
-
-**Incrementar FAILED_ATTEMPTS após falha:**
-```sql
-UPDATE TBUSUARIO
-SET FAILED_ATTEMPTS = FAILED_ATTEMPTS + 1
-WHERE USUARIO_ID = :USUARIO_ID;
-```
-
-**Zerar FAILED_ATTEMPTS após sucesso:**
-```sql
-UPDATE TBUSUARIO
-SET FAILED_ATTEMPTS = 0
-WHERE USUARIO_ID = :USUARIO_ID;
-```
-
-**Verificar se usuário está bloqueado:**
 ```sql
 SELECT
-    USUARIO_ID,
-    NOME,
-    FAILED_ATTEMPTS
-FROM TBUSUARIO
-WHERE USUARIO_ID = :USUARIO_ID
-  AND FAILED_ATTEMPTS >= 10; -- Threshold de bloqueio
-```
-
-**Buscar usuários com muitas tentativas falhas:**
-```sql
-SELECT
-    u.USUARIO_ID,
+    f.FACEID_ID,
+    f.USUARIO_ID,
+    f.DESCRIPTOR_FACIAL,
     u.NOME,
     u.EMAIL,
-    u.FAILED_ATTEMPTS,
-    f.MATRICULA
-FROM TBUSUARIO u
-LEFT JOIN TBUSUARIO_FACEID f ON f.USUARIO_ID = u.USUARIO_ID
-WHERE u.FAILED_ATTEMPTS >= 5
-ORDER BY u.FAILED_ATTEMPTS DESC;
+    u.MATRICULA,
+    u.FAILED_ATTEMPTS
+FROM TBUSUARIO_FACEID f
+JOIN TBUSUARIO u ON u.USUARIO_ID = f.USUARIO_ID
+WHERE COALESCE(u.DELETADO, 'N') = 'N'
+  AND COALESCE(u.BLOQUEADO, 'N') = 'N';
 ```
 
-**Resetar FAILED_ATTEMPTS manualmente (suporte):**
-```sql
--- Resetar para um usuário específico
-UPDATE TBUSUARIO
-SET FAILED_ATTEMPTS = 0
-WHERE USUARIO_ID = :USUARIO_ID;
-
--- Resetar para todos os usuários (manutenção)
-UPDATE TBUSUARIO
-SET FAILED_ATTEMPTS = 0
-WHERE FAILED_ATTEMPTS > 0;
-```
-
-### 2.3 Fluxo de Atualização do FAILED_ATTEMPTS
-
-**Cenário 1: Autenticação Falhou**
-```sql
--- 1. Incrementar contador de falhas
-UPDATE TBUSUARIO
-SET FAILED_ATTEMPTS = FAILED_ATTEMPTS + 1
-WHERE USUARIO_ID = :USUARIO_ID;
-
--- 2. Registrar na TBACESSO (auditoria)
-INSERT INTO TBACESSO (DATA, USUARIO_ID, LOCAL, TIPO, ATIVIDADE, IP, CHAVE_ID)
-VALUES (CURRENT_TIMESTAMP, :USUARIO_ID, 'WEB_FACE_ID', 'FACE_ID_AUTH_FAILED', :JSON_DETALHES, :IP, NULL);
-
--- 3. Verificar se atingiu threshold de bloqueio
-SELECT FAILED_ATTEMPTS FROM TBUSUARIO WHERE USUARIO_ID = :USUARIO_ID;
--- Se FAILED_ATTEMPTS >= 10, bloquear usuário
-```
-
-**Cenário 2: Autenticação Bem-Sucedida**
-```sql
--- 1. Zerar contador de falhas
-UPDATE TBUSUARIO
-SET FAILED_ATTEMPTS = 0
-WHERE USUARIO_ID = :USUARIO_ID;
-
--- 2. Registrar na TBACESSO (auditoria)
-INSERT INTO TBACESSO (DATA, USUARIO_ID, LOCAL, TIPO, ATIVIDADE, IP, CHAVE_ID)
-VALUES (CURRENT_TIMESTAMP, :USUARIO_ID, 'WEB_FACE_ID', 'FACE_ID_AUTH_SUCCESS', :JSON_DETALHES, :IP, :FACEID_ID);
-```
-
-### 2.4 Detecção de Tentativas Suspeitas
-
-**Verificar usuários próximos ao bloqueio:**
-```sql
-SELECT
-    u.USUARIO_ID,
-    u.NOME,
-    u.FAILED_ATTEMPTS,
-    (10 - u.FAILED_ATTEMPTS) as TENTATIVAS_RESTANTES
-FROM TBUSUARIO u
-WHERE u.FAILED_ATTEMPTS >= 7 -- Alerta quando faltam 3 tentativas
-ORDER BY u.FAILED_ATTEMPTS DESC;
-```
-
-**Verificar tentativas falhas por IP (últimos 15 minutos):**
-```sql
-SELECT
-    a.IP,
-    COUNT(*) as TOTAL_FALHAS,
-    COUNT(DISTINCT a.USUARIO_ID) as USUARIOS_AFETADOS
-FROM TBACESSO a
-WHERE a.LOCAL = 'WEB_FACE_ID'
-  AND a.TIPO = 'FACE_ID_AUTH_FAILED'
-  AND a.DATA >= DATEADD(-15 MINUTE TO CURRENT_TIMESTAMP)
-GROUP BY a.IP
-HAVING COUNT(*) >= 10
-ORDER BY TOTAL_FALHAS DESC;
-```
-
----
-
-## 3. Uso da Tabela TBACESSO para Auditoria de Face ID
-
-A tabela TBACESSO existente será utilizada para registrar todas as tentativas de autenticação por Face ID, mantendo consistência com o sistema de auditoria já estabelecido.
-
-### 2.1 Estrutura da TBACESSO (Existente)
+Inserir um novo descriptor:
 
 ```sql
-CREATE TABLE TBACESSO (
-    ACESSO_ID   INTEGER NOT NULL,
-    DATA        TIMESTAMP,
-    USUARIO_ID  INTEGER,
-    USUARIO     VARCHAR(30),
-    LOCAL       VARCHAR(30),
-    TIPO        VARCHAR(30),
-    ATIVIDADE   VARCHAR(2000),
-    ONLINE      CHAR(1),
-    IP          VARCHAR(15),
-    COMPUTADOR  VARCHAR(30),
-    VERSAO      VARCHAR(20),
-    CONEXAO     BIGINT,
-    CHAVE_ID    BIGINT,
-
-    CONSTRAINT PK_TBACESSO PRIMARY KEY (ACESSO_ID),
-    CONSTRAINT FK_TBACESSO_USER FOREIGN KEY (USUARIO_ID)
-        REFERENCES TBUSUARIO (USUARIO_ID)
-);
-```
-
-### 2.2 Mapeamento de Campos para Face ID
-
-| Campo TBACESSO | Uso para Face ID | Exemplo de Valor |
-|----------------|------------------|------------------|
-| ACESSO_ID | ID único do registro | Auto-incremento |
-| DATA | Data/hora da tentativa | CURRENT_TIMESTAMP |
-| USUARIO_ID | ID do usuário (se autenticado) | 123 ou NULL |
-| USUARIO | Nome do usuário (se autenticado) | "João Silva" ou NULL |
-| LOCAL | Origem do acesso | "WEB_FACE_ID" |
-| TIPO | Tipo de evento | "FACE_ID_AUTH_SUCCESS" ou "FACE_ID_AUTH_FAILED" |
-| ATIVIDADE | Detalhes da tentativa (JSON) | Ver seção 2.3 |
-| ONLINE | Sempre 'S' para Face ID | 'S' |
-| IP | Endereço IP de origem | "192.168.1.100" |
-| COMPUTADOR | User-Agent (navegador) | "Mozilla/5.0..." |
-| VERSAO | Versão do sistema | "1.0.0" |
-| CONEXAO | ID da sessão (opcional) | NULL |
-| CHAVE_ID | ID do Face ID (FACEID_ID) | 456 ou NULL |
-
-### 2.3 Valores Padronizados
-
-**Campo LOCAL:**
-- `"WEB_FACE_ID"` - Autenticação via Face ID na web
-
-**Campo TIPO:**
-- `"FACE_ID_AUTH_SUCCESS"` - Autenticação bem-sucedida
-- `"FACE_ID_AUTH_FAILED"` - Autenticação falhou (rosto não reconhecido)
-- `"FACE_ID_REGISTER"` - Cadastro de novo Face ID
-- `"FACE_ID_UPDATE"` - Atualização de Face ID existente
-- `"FACE_ID_DELETE"` - Exclusão de Face ID
-
-**Campo ATIVIDADE (formato JSON):**
-
-Para autenticação bem-sucedida:
-```json
-{
-  "evento": "autenticacao_facial",
-  "resultado": "sucesso",
-  "faceIdId": 456,
-  "distanciaMatch": 0.42,
-  "confianca": 0.70,
-  "matricula": "MAT001"
-}
-```
-
-Para autenticação falha:
-```json
-{
-  "evento": "autenticacao_facial",
-  "resultado": "falha",
-  "motivo": "Nenhum rosto correspondente encontrado",
-  "melhorDistancia": 0.85,
-  "threshold": 0.6
-}
-```
-
-Para cadastro:
-```json
-{
-  "evento": "cadastro_facial",
-  "faceIdId": 456,
-  "matricula": "MAT001",
-  "fotoArmazenada": false,
-  "armazenamento": "descriptor_only"
-}
-```
-
-### 2.4 Exemplo de Inserção
-
-**Autenticação bem-sucedida:**
-```sql
-INSERT INTO TBACESSO (
-    DATA,
-    USUARIO_ID,
-    USUARIO,
-    LOCAL,
-    TIPO,
-    ATIVIDADE,
-    ONLINE,
-    IP,
-    COMPUTADOR,
-    CHAVE_ID
-)
-VALUES (
-    CURRENT_TIMESTAMP,
-    123,
-    'João Silva',
-    'WEB_FACE_ID',
-    'FACE_ID_AUTH_SUCCESS',
-    '{"evento":"autenticacao_facial","resultado":"sucesso","faceIdId":456,"distanciaMatch":0.42,"confianca":0.70,"matricula":"MAT001"}',
-    'S',
-    '192.168.1.100',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    456
-);
-```
-
-**Autenticação falha:**
-```sql
-INSERT INTO TBACESSO (
-    DATA,
-    USUARIO_ID,
-    USUARIO,
-    LOCAL,
-    TIPO,
-    ATIVIDADE,
-    ONLINE,
-    IP,
-    COMPUTADOR,
-    CHAVE_ID
-)
-VALUES (
-    CURRENT_TIMESTAMP,
-    NULL,
-    NULL,
-    'WEB_FACE_ID',
-    'FACE_ID_AUTH_FAILED',
-    '{"evento":"autenticacao_facial","resultado":"falha","motivo":"Nenhum rosto correspondente encontrado","melhorDistancia":0.85,"threshold":0.6}',
-    'S',
-    '192.168.1.100',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    NULL
-);
-```
-
----
-
-## 3. Queries Úteis
-
-### 3.1 Cadastrar Novo Face ID
-
-```sql
--- Inserir novo Face ID somente com descriptor
 INSERT INTO TBUSUARIO_FACEID (
     USUARIO_ID,
     DESCRIPTOR_FACIAL,
-    MATRICULA,
-    ATIVO,
     USUARIO_I,
     USUARIONOME_I
 )
 VALUES (
     :USUARIO_ID,
-    :DESCRIPTOR_BLOB,      -- BLOB: Buffer de 512 bytes (128 floats)
-    :MATRICULA,
-    'S',
+    :DESCRIPTOR_BLOB,
     :USUARIO_LOGADO_ID,
     :USUARIO_LOGADO_NOME
 )
 RETURNING FACEID_ID;
 ```
 
-**Exemplo de uso no backend (Node.js):**
-```javascript
-// Converter descriptor Float32Array para Buffer
-const descriptorBuffer = Buffer.from(descriptor.buffer) // 512 bytes
-
-// Inserir no banco
-await db.query(`
-  INSERT INTO TBUSUARIO_FACEID (
-    USUARIO_ID, DESCRIPTOR_FACIAL, MATRICULA, ATIVO
-  ) VALUES (?, ?, ?, 'S')
-`, [usuarioId, descriptorBuffer, matricula])
-```
-
-### 3.2 Buscar Todos os Descritores Ativos
+Atualizar descriptor:
 
 ```sql
--- Buscar todos os descritores para matching
-SELECT
-    f.FACEID_ID,
-    f.USUARIO_ID,
-    f.DESCRIPTOR_FACIAL,
-    f.MATRICULA,
-    u.NOME,
-    u.EMAIL
-FROM TBUSUARIO_FACEID f
-LEFT JOIN TBUSUARIO u ON u.USUARIO_ID = f.USUARIO_ID
-WHERE f.ATIVO = 'S'
-ORDER BY f.DATA_INC DESC;
-```
-
-### 3.3 Registrar Tentativa de Autenticação
-
-**Autenticação Bem-Sucedida (zerar FAILED_ATTEMPTS):**
-```sql
--- 1. Zerar contador de falhas
-UPDATE TBUSUARIO
-SET FAILED_ATTEMPTS = 0
-WHERE USUARIO_ID = :USUARIO_ID;
-
--- 2. Registrar na TBACESSO (auditoria)
-INSERT INTO TBACESSO (
-    DATA,
-    USUARIO_ID,
-    USUARIO,
-    LOCAL,
-    TIPO,
-    ATIVIDADE,
-    ONLINE,
-    IP,
-    COMPUTADOR,
-    CHAVE_ID
-)
-VALUES (
-    CURRENT_TIMESTAMP,
-    :USUARIO_ID,
-    :USUARIO_NOME,
-    'WEB_FACE_ID',
-    'FACE_ID_AUTH_SUCCESS',
-    '{"evento":"autenticacao_facial","resultado":"sucesso","faceIdId":' || :FACEID_ID || ',"distanciaMatch":' || :DISTANCIA || ',"confianca":' || :CONFIANCA || ',"matricula":"' || :MATRICULA || '"}',
-    'S',
-    :IP,
-    :USER_AGENT,
-    :FACEID_ID
-);
-```
-
-**Autenticação Falha (incrementar FAILED_ATTEMPTS):**
-```sql
--- 1. Incrementar contador de falhas
-UPDATE TBUSUARIO
-SET FAILED_ATTEMPTS = FAILED_ATTEMPTS + 1
-WHERE USUARIO_ID = :USUARIO_ID;
-
--- 2. Registrar na TBACESSO (auditoria)
-INSERT INTO TBACESSO (
-    DATA,
-    USUARIO_ID,
-    USUARIO,
-    LOCAL,
-    TIPO,
-    ATIVIDADE,
-    ONLINE,
-    IP,
-    COMPUTADOR,
-    CHAVE_ID
-)
-VALUES (
-    CURRENT_TIMESTAMP,
-    :USUARIO_ID,
-    :USUARIO_NOME,
-    'WEB_FACE_ID',
-    'FACE_ID_AUTH_FAILED',
-    '{"evento":"autenticacao_facial","resultado":"falha","motivo":"Nenhum rosto correspondente encontrado","melhorDistancia":' || :DISTANCIA_MELHOR_MATCH || ',"threshold":0.6}',
-    'S',
-    :IP,
-    :USER_AGENT,
-    NULL
-);
-
--- 3. Verificar se atingiu threshold de bloqueio
-SELECT FAILED_ATTEMPTS
-FROM TBUSUARIO
-WHERE USUARIO_ID = :USUARIO_ID;
--- Se FAILED_ATTEMPTS >= 10, retornar erro de bloqueio
-```
-
-### 3.4 Buscar Histórico de Tentativas de um Usuário
-
-```sql
--- Últimas 20 tentativas de Face ID de um usuário
-SELECT
-    a.ACESSO_ID,
-    a.DATA,
-    a.TIPO,
-    a.ATIVIDADE,
-    a.IP,
-    a.COMPUTADOR
-FROM TBACESSO a
-WHERE a.CHAVE_ID = :FACEID_ID
-  AND a.LOCAL = 'WEB_FACE_ID'
-  AND a.TIPO LIKE 'FACE_ID_AUTH%'
-ORDER BY a.DATA DESC
-ROWS 20;
-```
-
-### 3.5 Detectar Tentativas Suspeitas
-
-**Verificar usuários bloqueados ou próximos ao bloqueio (usando FAILED_ATTEMPTS):**
-```sql
--- Usuários com muitas tentativas falhas
-SELECT
-    u.USUARIO_ID,
-    u.NOME,
-    u.EMAIL,
-    u.FAILED_ATTEMPTS,
-    (10 - u.FAILED_ATTEMPTS) AS TENTATIVAS_RESTANTES,
-    f.MATRICULA,
-    f.ATIVO AS FACEID_ATIVO
-FROM TBUSUARIO u
-LEFT JOIN TBUSUARIO_FACEID f ON f.USUARIO_ID = u.USUARIO_ID
-WHERE u.FAILED_ATTEMPTS >= 5
-ORDER BY u.FAILED_ATTEMPTS DESC;
-```
-
-**Verificar IPs com muitas tentativas falhas (usando TBACESSO):**
-```sql
--- Buscar IPs com muitas tentativas falhas na última hora
-SELECT
-    a.IP,
-    COUNT(*) AS TOTAL_TENTATIVAS,
-    SUM(CASE WHEN a.TIPO = 'FACE_ID_AUTH_FAILED' THEN 1 ELSE 0 END) AS TENTATIVAS_FALHAS,
-    COUNT(DISTINCT a.USUARIO_ID) AS USUARIOS_AFETADOS,
-    MAX(a.DATA) AS ULTIMA_TENTATIVA
-FROM TBACESSO a
-WHERE a.LOCAL = 'WEB_FACE_ID'
-  AND a.DATA >= DATEADD(-1 HOUR TO CURRENT_TIMESTAMP)
-GROUP BY a.IP
-HAVING SUM(CASE WHEN a.TIPO = 'FACE_ID_AUTH_FAILED' THEN 1 ELSE 0 END) >= 10
-ORDER BY TENTATIVAS_FALHAS DESC;
-```
-
-### 3.6 Soft Delete de Face ID
-
-```sql
--- Desativar Face ID (soft delete)
 UPDATE TBUSUARIO_FACEID
-SET
-    ATIVO = 'N',
-    DATA_DEL = CURRENT_TIMESTAMP,
-    USUARIO_D = :USUARIO_LOGADO_ID,
-    USUARIONOME_D = :USUARIO_LOGADO_NOME
+SET DESCRIPTOR_FACIAL = :DESCRIPTOR_BLOB,
+    USUARIO_A = :USUARIO_LOGADO_ID,
+    USUARIONOME_A = :USUARIO_LOGADO_NOME
 WHERE FACEID_ID = :FACEID_ID;
 ```
 
-### 3.7 Estatísticas de Uso (usando TBACESSO)
+---
+
+## 4. `TBINSPECAO_MANUAL`
+
+### 4.1 DDL atual
 
 ```sql
--- Estatísticas gerais do Face ID nos últimos 30 dias
-SELECT
-    COUNT(DISTINCT f.FACEID_ID) AS TOTAL_CADASTROS,
-    COUNT(DISTINCT CASE WHEN f.ATIVO = 'S' THEN f.FACEID_ID END) AS CADASTROS_ATIVOS,
-    COUNT(DISTINCT a.ACESSO_ID) AS TOTAL_TENTATIVAS,
-    COUNT(DISTINCT CASE WHEN a.TIPO = 'FACE_ID_AUTH_SUCCESS' THEN a.ACESSO_ID END) AS TENTATIVAS_SUCESSO,
-    COUNT(DISTINCT CASE WHEN a.TIPO = 'FACE_ID_AUTH_FAILED' THEN a.ACESSO_ID END) AS TENTATIVAS_FALHA
-FROM TBUSUARIO_FACEID f
-LEFT JOIN TBACESSO a ON a.CHAVE_ID = f.FACEID_ID
-    AND a.LOCAL = 'WEB_FACE_ID'
-    AND a.TIPO LIKE 'FACE_ID_AUTH%'
-WHERE a.DATA >= DATEADD(-30 DAY TO CURRENT_TIMESTAMP);
-```
+CREATE GENERATOR GEN_TBINSPECAOMANUAL_ID;
 
-### 3.8 Registrar Cadastro de Face ID (usando TBACESSO)
-
-```sql
--- Registrar evento de cadastro de Face ID
-INSERT INTO TBACESSO (
-    DATA,
-    USUARIO_ID,
-    USUARIO,
-    LOCAL,
-    TIPO,
-    ATIVIDADE,
-    ONLINE,
-    IP,
-    COMPUTADOR,
-    CHAVE_ID
-)
-VALUES (
-    CURRENT_TIMESTAMP,
-    :USUARIO_ID,
-    :USUARIO_NOME,
-    'WEB_FACE_ID',
-    'FACE_ID_REGISTER',
-    '{"evento":"cadastro_facial","faceIdId":' || :FACEID_ID || ',"matricula":"' || :MATRICULA || '","fotoArmazenada":false,"armazenamento":"descriptor_only"}',
-    'S',
-    :IP,
-    :USER_AGENT,
-    :FACEID_ID
-);
-```
-
----
-
-## 4. Política de Foto e Descriptor
-
-### 4.1 Visão Geral
-
-As fotos dos rostos **não são persistidas**. A imagem capturada pela câmera existe apenas no navegador, pelo tempo necessário para o face-api.js detectar o rosto e gerar o `DESCRIPTOR_FACIAL`.
-
-**Vantagens:**
-- ✅ Banco muito menor: grava apenas ~512 bytes do descriptor por usuário
-- ✅ Melhor performance de backup, restore e listagens
-- ✅ Menor exposição de dado biométrico sensível
-- ✅ Nenhum gerenciamento de arquivos por terminal
-- ✅ Login funciona nos 10 terminais desde que todos usem o mesmo Firebird central
-
-**Desvantagens:**
-- ⚠️ Não há foto cadastrada para conferência visual posterior
-- ⚠️ Re-cadastro depende de nova captura presencial
-- ⚠️ A auditoria deve se apoiar em `TBACESSO`, usuário, matrícula, terminal/IP, distância e confiança
-
-### 4.2 Regras de Captura
-
-| Propriedade | Valor |
-|-------------|-------|
-| Persistência da foto | Não persistir |
-| Envio da foto ao backend | Não enviar |
-| Valor gravado no banco | Apenas `DESCRIPTOR_FACIAL` |
-| Descriptor | 128 floats, 512 bytes em BLOB |
-| Faces detectáveis | Exatamente 1 |
-
-### 4.3 Fluxo de Cadastro
-
-**No Frontend (React):**
-```javascript
-// Capturar frame, detectar rosto e extrair descriptor em memória.
-const detection = await faceapi
-  .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-  .withFaceLandmarks()
-  .withFaceDescriptor()
-
-if (!detection) {
-  throw new Error('Nenhum rosto detectado')
-}
-
-// Enviar somente o descriptor e os dados de vínculo.
-await api.post('/face-id/register', {
-  descriptor: Array.from(detection.descriptor),
-  matricula: matricula
-})
-
-// Nenhuma imagem é gravada em localStorage, IndexedDB, arquivo ou banco.
-```
-
-**No Backend (Node.js):**
-```javascript
-const descriptorBuffer = vectorMath.descriptorToBuffer(descriptor)
-
-await db.query(`
-  INSERT INTO TBUSUARIO_FACEID (DESCRIPTOR_FACIAL, MATRICULA)
-  VALUES (?, ?)
-`, [descriptorBuffer, matricula])
-```
-
-### 4.4 Observação para terminais sem HTTPS
-
-Em navegadores modernos, câmera via `getUserMedia` exige contexto seguro. Em máquinas isoladas sem HTTPS, a forma mais simples é rodar frontend e backend localmente em cada terminal e abrir a aplicação por `http://localhost` ou `http://127.0.0.1`, que os navegadores tratam como origem segura para câmera. Todos os terminais devem apontar para o mesmo Firebird central, onde ficam os descriptors. Se os terminais acessarem `http://servidor:porta` pela rede, a câmera pode ser bloqueada; nesse caso será necessário certificado local, política corporativa do navegador ou empacotamento desktop/local.
-
----
-
-## 5. Considerações de Performance
-
-### 5.1 Otimização de Queries
-
-**Problema:** Matching de vetores faciais requer comparação com todos os descritores ativos.
-
-**Solução:**
-1. Limitar busca apenas a registros ativos (`ATIVO = 'S'`)
-2. Implementar cache de descritores no backend (Redis/Memcached)
-3. Processar matching no backend (não no banco)
-
-### 5.2 Tamanho Estimado das Tabelas
-
-**TBUSUARIO_FACEID:**
-- Tamanho por registro: ~1 KB (512 bytes descriptor + campos)
-- **1.000 usuários**: ~1 MB
-- **10.000 usuários**: ~10 MB
-
-**Recomendação:**
-- Manter apenas descriptor no banco para reduzir superfície de ataque e simplificar operação dos 10 terminais.
-- Não criar endpoint de foto nem campo BLOB de imagem.
-
-**TBACESSO (registros de Face ID):**
-- Tamanho por registro: ~500 bytes (incluindo JSON no campo ATIVIDADE)
-- 100 tentativas/dia × 90 dias: ~4.5MB
-- 1.000 tentativas/dia × 90 dias: ~45MB
-- **Nota:** TBACESSO já existe e armazena outros tipos de acesso também
-
-**Total estimado para 10.000 usuários:**
-- Descriptor-only: ~10 MB (TBUSUARIO_FACEID) + ~45 MB (TBACESSO) = **~55 MB**
-
-### 5.3 Backup e Recuperação
-
-**Dados Críticos:**
-- ✅ TBUSUARIO_FACEID (templates biométricos, sem foto persistida)
-- ✅ TBACESSO (logs de auditoria - já existente no sistema)
-
-**Estratégia:**
-- Backup diário do banco completo
-- Retenção: 30 dias
-- TBACESSO segue política de retenção já estabelecida no sistema
-- **Vantagem:** Backup único e leve, sem diretórios de foto para sincronizar entre terminais
-
----
-
-## 6. Migração de Dados Existentes
-
-### 6.1 Migração do IndexedDB para Firebird
-
-Se houver dados de Face ID já cadastrados no IndexedDB do navegador:
-
-```javascript
-// Script de migração (executar no frontend)
-async function migrateFaceIdToBackend() {
-  const users = await getAllFaceIdUsers() // Do IndexedDB
-
-  for (const user of users) {
-    await fetch('/api/face-id/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: user.name,
-        matricula: user.matricula,
-        descriptor: user.descriptors
-      })
-    })
-  }
-}
-```
-
----
-
-## 7. Scripts de Instalação Completos
-
-### 7.1 Script DDL Completo
-
-```sql
--- ============================================
--- SCRIPT DE CRIAÇÃO - SISTEMA FACE ID
--- Versão: 1.0
--- Data: 22/11/2025
--- Firebird: 2.5+
--- ============================================
-
--- 1. TABELA TBUSUARIO_FACEID
-CREATE TABLE TBUSUARIO_FACEID (
-    FACEID_ID           INTEGER NOT NULL,
-    USUARIO_ID          INTEGER,
-
-    -- Descriptor facial: vetor de 128 floats (512 bytes)
-    -- Usado para reconhecimento e matching facial
-    DESCRIPTOR_FACIAL   BLOB SUB_TYPE BINARY SEGMENT SIZE 512 NOT NULL,
-
-    MATRICULA           VARCHAR(30),
-    ATIVO               CHAR(1) DEFAULT 'S',
-    DATA_INC            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    USUARIO_I           INTEGER,
-    USUARIONOME_I       VARCHAR(30),
-    DATA_ALT            TIMESTAMP,
-    USUARIO_A           INTEGER,
-    USUARIONOME_A       VARCHAR(30),
-    DATA_DEL            TIMESTAMP,
-    USUARIO_D           INTEGER,
-    USUARIONOME_D       VARCHAR(30),
-    CONSTRAINT PK_TBUSUARIO_FACEID PRIMARY KEY (FACEID_ID),
-    CONSTRAINT FK_TBUSUARIO_FACEID FOREIGN KEY (USUARIO_ID)
-        REFERENCES TBUSUARIO(USUARIO_ID),
-    CONSTRAINT CHK_TBUSUARIO_FACEID_ATIVO CHECK (ATIVO IN ('S', 'N'))
+CREATE TABLE TBINSPECAO_MANUAL (
+    INSPECAOMANUAL_ID    INTEGER NOT NULL,
+    STATUS               VARCHAR(10),
+    OP_ID                INTEGER,
+    OP                   VARCHAR(10),
+    ERP_PRODUTO          VARCHAR(10),
+    PRODUTO              VARCHAR(80),
+    LOTE                 VARCHAR(10),
+    VALIDADE             DATE,
+    GTIN                 VARCHAR(20),
+    REGISTRO_ANVISA      VARCHAR(20),
+    LINHAPRODUCAO_ID     INTEGER,
+    FASE                 VARCHAR(10),
+    DATA                 TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CAMINHO_FOTO         VARCHAR(500),
+    GTIN_CONFORME        VARCHAR(3),
+    DATAMATRIX_CONFORME  VARCHAR(3),
+    LOTE_CONFORME        VARCHAR(3),
+    VALIDADE_CONFORME    VARCHAR(3),
+    OBSERVACOES          VARCHAR(1000),
+    USUARIO_ID           INTEGER,
+    USUARIO              VARCHAR(30),
+    LOCALIZACAO          VARCHAR(200),
+    DATA_INC             TIMESTAMP,
+    USUARIO_I            INTEGER,
+    USUARIONOME_I        VARCHAR(30),
+    DATA_ALT             TIMESTAMP,
+    USUARIO_A            INTEGER,
+    USUARIONOME_A        VARCHAR(30),
+    DATA_DEL             TIMESTAMP,
+    USUARIO_D            INTEGER,
+    USUARIONOME_D        VARCHAR(30),
+    DELETADO             CHAR(1) DEFAULT 'N'
 );
 
--- 2. GENERATOR E TRIGGER TBUSUARIO_FACEID
-CREATE GENERATOR GEN_TBUSUARIO_FACEID_ID;
-SET GENERATOR GEN_TBUSUARIO_FACEID_ID TO 0;
+ALTER TABLE TBINSPECAO_MANUAL ADD CONSTRAINT PK_TBINSPMANUAL PRIMARY KEY (INSPECAOMANUAL_ID)
+USING INDEX IDX_PK_TBINSPMANUAL;
 
-CREATE TRIGGER TRG_TBUSUARIO_FACEID_BI FOR TBUSUARIO_FACEID
+ALTER TABLE TBINSPECAO_MANUAL ADD CONSTRAINT FK_TBINSPMANUAL_LINHA
+FOREIGN KEY (LINHAPRODUCAO_ID) REFERENCES TBLINHA_PRODUCAO (LINHAPRODUCAO_ID)
+USING INDEX IDX_FK_TBINSPMANUAL_LINHA;
+
+ALTER TABLE TBINSPECAO_MANUAL ADD CONSTRAINT FK_TBINSPMANUAL_OP
+FOREIGN KEY (OP_ID) REFERENCES TBOP (OP_ID)
+USING INDEX IDX_FK_TBINSPMANUAL_OP;
+
+CREATE DESCENDING INDEX IDX_TBINSPMANUAL_DATA ON TBINSPECAO_MANUAL (DATA);
+CREATE INDEX IDX_TBINSPMANUAL_DATA_DEL ON TBINSPECAO_MANUAL (DATA_DEL);
+CREATE DESCENDING INDEX IDX_TBINSPMANUAL_DATA_INC ON TBINSPECAO_MANUAL (DATA_INC);
+CREATE INDEX IDX_TBINSPMANUAL_DELETADO ON TBINSPECAO_MANUAL (DELETADO);
+CREATE INDEX IDX_TBINSPMANUAL_FASE ON TBINSPECAO_MANUAL (FASE);
+CREATE INDEX IDX_TBINSPMANUAL_OP ON TBINSPECAO_MANUAL (OP);
+CREATE INDEX IDX_TBINSPMANUAL_STATUS ON TBINSPECAO_MANUAL (STATUS);
+CREATE INDEX IDX_TBINSPMANUAL_USUARIO ON TBINSPECAO_MANUAL (USUARIO);
+
+SET TERM ^ ;
+
+CREATE OR ALTER TRIGGER TRG_TBINSPECAO_MANUAL_BI FOR TBINSPECAO_MANUAL
 ACTIVE BEFORE INSERT POSITION 0
 AS
 BEGIN
-    IF (NEW.FACEID_ID IS NULL) THEN
-        NEW.FACEID_ID = GEN_ID(GEN_TBUSUARIO_FACEID_ID, 1);
-    IF (NEW.DATA_INC IS NULL) THEN
-        NEW.DATA_INC = CURRENT_TIMESTAMP;
-END;
+  IF (NEW.INSPECAOMANUAL_ID IS NULL) THEN
+    NEW.INSPECAOMANUAL_ID = GEN_ID(GEN_TBINSPECAOMANUAL_ID, 1);
 
-CREATE TRIGGER TRG_TBUSUARIO_FACEID_BU FOR TBUSUARIO_FACEID
-ACTIVE BEFORE UPDATE POSITION 0
-AS
-BEGIN
-    NEW.DATA_ALT = CURRENT_TIMESTAMP;
-END;
+  IF (NEW.DATA IS NULL) THEN
+    NEW.DATA = CURRENT_TIMESTAMP;
 
--- 3. ÍNDICES TBUSUARIO_FACEID
-CREATE INDEX IDX_FACEID_USUARIO_ID ON TBUSUARIO_FACEID(USUARIO_ID);
-CREATE INDEX IDX_FACEID_MATRICULA ON TBUSUARIO_FACEID(MATRICULA);
-CREATE INDEX IDX_FACEID_ATIVO ON TBUSUARIO_FACEID(ATIVO);
-CREATE INDEX IDX_FACEID_USUARIO_ATIVO ON TBUSUARIO_FACEID(USUARIO_ID, ATIVO);
+  IF (NEW.DATA_INC IS NULL) THEN
+    NEW.DATA_INC = CURRENT_TIMESTAMP;
 
-COMMIT;
+  IF (NEW.DELETADO IS NULL) THEN
+    NEW.DELETADO = 'N';
+END
+^
 
--- ============================================
--- OBSERVAÇÕES IMPORTANTES
--- ============================================
---
--- 1. POLÍTICA DE FOTOS:
---    - Fotos não são persistidas no banco nem no filesystem
---    - A imagem existe apenas em memória no navegador durante a captura
---    - O backend recebe e grava somente DESCRIPTOR_FACIAL
---    - Não criar campo nem endpoint para persistência de foto
---
--- 2. DESCRIPTOR FACIAL:
---    - Campo DESCRIPTOR_FACIAL armazena vetor de 128 floats
---    - Tamanho fixo: 512 bytes (128 × 4 bytes)
---    - NÃO é uma imagem, é um vetor matemático
---    - Usado para reconhecimento e matching facial
---
--- 3. AUDITORIA (TBACESSO):
---    - A tabela TBACESSO (já existente) registra tentativas de autenticação
---    - Não é necessário criar tabela adicional de tentativas
---    - Mapeamento de campos TBACESSO para Face ID:
---      * LOCAL = 'WEB_FACE_ID'
---      * TIPO = 'FACE_ID_AUTH_SUCCESS' ou 'FACE_ID_AUTH_FAILED'
---      * CHAVE_ID = FACEID_ID
---      * ATIVIDADE = JSON com detalhes da tentativa
---
--- 4. CONTROLE DE TENTATIVAS FALHAS:
---    - Campo TBUSUARIO.FAILED_ATTEMPTS controla falhas consecutivas
---    - Incrementa +1 a cada falha
---    - Zera após sucesso
---    - Bloqueia usuário quando >= 10
---
--- ============================================
--- FIM DO SCRIPT
--- ============================================
+SET TERM ; ^
+```
+
+### 4.2 Regras da inspeção manual
+
+- `TBINSPECAO_MANUAL` é a tabela deste projeto para inspeções manuais.
+- `TBINSPECAO` permanece reservada ao SICFAR.
+- `GTIN_CONFORME`, `DATAMATRIX_CONFORME`, `LOTE_CONFORME` e `VALIDADE_CONFORME` usam `VARCHAR(3)` com `Sim`, `Não` ou `NULL`.
+- A DDL atual não possui constraints `CHECK` para esses campos; valide na API.
+- Exclusão de inspeção manual deve ser lógica via `DELETADO = 'S'`, `DATA_DEL`, `USUARIO_D` e `USUARIONOME_D`.
+
+---
+
+## 5. Validação Manual do Metadata
+
+Use estas consultas antes de gerar ou aplicar qualquer migration:
+
+```sql
+SELECT RDB$RELATION_NAME
+FROM RDB$RELATIONS
+WHERE RDB$RELATION_NAME IN ('TBUSUARIO', 'TBUSUARIO_FACEID', 'TBINSPECAO_MANUAL');
+
+SELECT RDB$RELATION_NAME, RDB$FIELD_NAME, RDB$FIELD_POSITION
+FROM RDB$RELATION_FIELDS
+WHERE RDB$RELATION_NAME IN ('TBUSUARIO', 'TBUSUARIO_FACEID', 'TBINSPECAO_MANUAL')
+ORDER BY RDB$RELATION_NAME, RDB$FIELD_POSITION;
+
+SELECT RDB$RELATION_NAME, RDB$CONSTRAINT_NAME, RDB$CONSTRAINT_TYPE
+FROM RDB$RELATION_CONSTRAINTS
+WHERE RDB$RELATION_NAME IN ('TBUSUARIO', 'TBUSUARIO_FACEID', 'TBINSPECAO_MANUAL')
+ORDER BY RDB$RELATION_NAME, RDB$CONSTRAINT_NAME;
+
+SELECT RDB$RELATION_NAME, RDB$INDEX_NAME, RDB$INDEX_TYPE
+FROM RDB$INDICES
+WHERE RDB$RELATION_NAME IN ('TBUSUARIO', 'TBUSUARIO_FACEID', 'TBINSPECAO_MANUAL')
+ORDER BY RDB$RELATION_NAME, RDB$INDEX_NAME;
 ```
 
 ---
 
-**Documento criado em:** 22/11/2025
-**Versão:** 2.0 (Atualizado para usar TBACESSO)
-**Autor:** Sistema de Documentação Técnica
-**Compatibilidade:** Firebird 2.5+
+## 6. Impacto nas Migrations
 
+- Não execute migrations de criação quando o banco já tiver as três tabelas no formato descrito aqui.
+- `TBUSUARIO.MATRICULA` já existe no schema atual; não use migrations que removam esse campo em ambientes alinhados com a DDL enviada.
+- `TBUSUARIO_FACEID.ATIVO` e `TBUSUARIO_FACEID.MATRICULA` não existem no schema atual; código e documentação não devem depender desses campos.
+- Se precisar adicionar auditoria de tentativas, inativação lógica do Face ID ou unicidade por usuário, crie uma nova migration Firebird 2.5 específica e autocontida.
 
+---
+
+**Versão:** 3.0  
+**Atualizado em:** 01/07/2026  
+**Compatibilidade:** Firebird 2.5

@@ -7,16 +7,17 @@
 #### 1.1 Validar Estrutura do Banco ✅
 - [ ] Revisar documento `00-mapeamento-sistema-atual.md`
 - [ ] Verificar se `TBOP` e `TBPRODUTO` já existem e estão populadas no banco atual
-- [ ] Criar apenas a nova tabela `TBINSPECAO_MANUAL` para inspeções manuais deste projeto
+- [ ] Validar que `TBUSUARIO`, `TBUSUARIO_FACEID` e `TBINSPECAO_MANUAL` existem conforme a DDL atual enviada
 - [ ] Confirmar que a tabela `TBINSPECAO` existente permanecerá reservada para o projeto SICFAR
 - [ ] Validar `LINHAPRODUCAO_ID`, `FASE`, `STATUS`, conformes `VARCHAR(3)` e campos de auditoria na `TBINSPECAO_MANUAL`
+- [ ] Validar que `TBUSUARIO_FACEID` não depende de `MATRICULA` nem `ATIVO`
 - [ ] Ajustar nomes de campos se necessário
 - [ ] Validar tipos de dados
 - [ ] Verificar permissões do usuário Firebird
 
 #### 1.2 Preparar Ambiente ✅
 - [ ] Verificar versão do Node.js (>= 18)
-- [ ] Verificar versão do Firebird (>= 3.0)
+- [ ] Verificar versão do Firebird (2.5 no ambiente atual)
 - [ ] Testar conexão com banco Firebird
 - [ ] Criar backup do banco (se já houver dados)
 - [ ] Documentar credenciais e caminhos

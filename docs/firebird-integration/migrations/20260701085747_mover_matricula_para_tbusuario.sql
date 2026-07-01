@@ -3,6 +3,12 @@
 /******************************************************************************/
 
 /******************************************************************************/
+/****  MIGRATION LEGADA: usar apenas em bancos com MATRICULA antiga em      ****/
+/****  TBUSUARIO_FACEID. No schema atual, TBUSUARIO.MATRICULA ja existe e   ****/
+/****  TBUSUARIO_FACEID.MATRICULA nao existe.                               ****/
+/******************************************************************************/
+
+/******************************************************************************/
 /****   O SET SQL DIALECT abaixo e usado apenas pelo comparador de banco    ****/
 /******************************************************************************/
 SET SQL DIALECT 3;

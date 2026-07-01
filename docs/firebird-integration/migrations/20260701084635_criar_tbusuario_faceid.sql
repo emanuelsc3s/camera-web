@@ -23,8 +23,6 @@ CREATE TABLE TBUSUARIO_FACEID (
     FACEID_ID          INTEGER NOT NULL,
     USUARIO_ID         INTEGER,
     DESCRIPTOR_FACIAL  BLOB SUB_TYPE 0 SEGMENT SIZE 512 NOT NULL,
-    MATRICULA          VARCHAR(30),
-    ATIVO              CHAR(1) DEFAULT 'S',
     DATA_INC           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     USUARIO_I          INTEGER,
     USUARIONOME_I      VARCHAR(30),
@@ -63,24 +61,10 @@ COMMIT;
 
 
 /******************************************************************************/
-/****                         Restricoes de check                          ****/
-/******************************************************************************/
-
-
-ALTER TABLE TBUSUARIO_FACEID ADD CONSTRAINT CK_TBUSUARIO_FACEID_ATIVO CHECK (ATIVO IN ('S', 'N') OR ATIVO IS NULL);
-
-COMMIT;
-
-
-
-/******************************************************************************/
 /****                               Indices                                ****/
 /******************************************************************************/
 
 
-CREATE INDEX IDX_FACEID_MATRICULA ON TBUSUARIO_FACEID (MATRICULA);
-CREATE INDEX IDX_FACEID_ATIVO ON TBUSUARIO_FACEID (ATIVO);
-CREATE INDEX IDX_FACEID_USUARIO_ATIVO ON TBUSUARIO_FACEID (USUARIO_ID, ATIVO);
 CREATE DESCENDING INDEX IDX_FACEID_DATA_INC ON TBUSUARIO_FACEID (DATA_INC);
 
 COMMIT;
@@ -112,9 +96,6 @@ BEGIN
 
   IF (NEW.DATA_INC IS NULL) THEN
     NEW.DATA_INC = CURRENT_TIMESTAMP;
-
-  IF (NEW.ATIVO IS NULL) THEN
-    NEW.ATIVO = 'S';
 END
 ^
 

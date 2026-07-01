@@ -89,16 +89,16 @@ O sistema será integrado ao sistema legado existente (Firebird 2.5) como uma **
 
 **Regras de Negócio:**
 - RN-001: Apenas usuários já cadastrados no sistema podem registrar Face ID
-- RN-002: Cada usuário pode ter apenas um cadastro de Face ID ativo
+- RN-002: Cada usuário deve ter apenas um cadastro de Face ID vigente; a API deve validar isso, pois a DDL atual não possui `UNIQUE` por `USUARIO_ID`
 - RN-003: O sistema deve capturar a imagem da câmera somente em memória para gerar o descriptor facial
 - RN-004: O sistema deve detectar automaticamente o rosto na imagem
 - RN-005: O cadastro só é concluído se um rosto for detectado com sucesso
-- RN-006: O usuário pode informar matrícula (opcional) durante o cadastro
+- RN-006: O usuário pode informar matrícula para localizar `TBUSUARIO.MATRICULA`; a matrícula não é gravada em `TBUSUARIO_FACEID`
 - RN-007: A foto do rosto não deve ser enviada ao backend nem persistida no banco ou em arquivos
 
 **Dados Capturados:**
 - Características faciais únicas (descriptor biométrico)
-- Matrícula (opcional)
+- Matrícula do usuário, lida de `TBUSUARIO.MATRICULA`
 - Data e hora do cadastro
 - Usuário que realizou o cadastro
 
@@ -109,7 +109,7 @@ O sistema será integrado ao sistema legado existente (Firebird 2.5) como uma **
 **Descrição:** O sistema deve permitir que usuários façam login utilizando reconhecimento facial.
 
 **Regras de Negócio:**
-- RN-008: O sistema deve comparar o rosto capturado com todos os cadastros ativos
+- RN-008: O sistema deve comparar o rosto capturado com os cadastros de usuários não deletados e não bloqueados
 - RN-009: A autenticação é bem-sucedida se a similaridade for >= 60% (threshold padrão)
 - RN-010: Apenas um rosto deve ser detectado na imagem para autenticação
 - RN-011: O sistema deve registrar todas as tentativas de autenticação (sucesso e falha)
@@ -162,10 +162,10 @@ O sistema será integrado ao sistema legado existente (Firebird 2.5) como uma **
 
 **Regras de Negócio:**
 - RN-021: Apenas o próprio usuário ou administradores podem excluir Face ID
-- RN-022: A exclusão é lógica (campo ATIVO = 'N'), não física
+- RN-022: A DDL atual não possui `ATIVO` ou `DELETADO` em `TBUSUARIO_FACEID`; a remoção do dado biométrico deve excluir o descriptor ou exigir nova migration para inativação lógica
 - RN-023: O sistema deve registrar quem realizou a exclusão
-- RN-024: O descriptor biométrico é mantido conforme política de retenção; fotos não existem para retenção
-- RN-025: Usuário pode reativar Face ID posteriormente (novo cadastro)
+- RN-024: Fotos não existem para retenção; o descriptor segue a política de retenção aprovada pelo cliente
+- RN-025: Usuário pode cadastrar Face ID novamente posteriormente
 
 **Motivos para Exclusão:**
 - Usuário não deseja mais usar Face ID
@@ -202,7 +202,7 @@ O sistema será integrado ao sistema legado existente (Firebird 2.5) como uma **
 - RN-031: Apenas administradores podem acessar a listagem completa
 - RN-032: A listagem deve ser paginada (50 registros por página)
 - RN-033: Deve permitir busca por nome ou matrícula
-- RN-034: Deve exibir status (ativo/inativo)
+- RN-034: Deve exibir status operacional do usuário com base em `TBUSUARIO.DELETADO` e `TBUSUARIO.BLOQUEADO`
 - RN-035: Deve exibir data do último acesso bem-sucedido
 - RN-036: Deve exibir quantidade de acessos nos últimos 7 dias
 
@@ -210,7 +210,7 @@ O sistema será integrado ao sistema legado existente (Firebird 2.5) como uma **
 - Nome do usuário
 - Matrícula
 - E-mail
-- Status (ativo/inativo)
+- Status operacional do usuário
 - Data de cadastro
 - Último acesso
 - Acessos recentes (7 dias)
@@ -351,7 +351,7 @@ O sistema será integrado ao sistema legado existente (Firebird 2.5) como uma **
 3. Usuário clica em "Excluir Face ID"
 4. Sistema exibe confirmação: "Tem certeza que deseja excluir seu Face ID? Você precisará usar login tradicional."
 5. Usuário confirma exclusão
-6. Sistema desativa Face ID (ATIVO = 'N')
+6. Sistema remove o descriptor facial ou aplica fluxo de inativação criado por migration específica
 7. Sistema registra exclusão na auditoria
 8. Sistema exibe mensagem: "Face ID excluído com sucesso."
 9. Usuário volta a usar apenas login tradicional
@@ -407,22 +407,20 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 │ - USUARIO_ID    │         │ - FACEID_ID (PK)     │
 │ - NOME          │         │ - USUARIO_ID (FK)    │
 │ - EMAIL         │         │ - DESCRIPTOR_FACIAL  │
-│ - FAILED_ATTEMPTS│        │ - MATRICULA          │
-└─────────────────┘         │ - ATIVO              │
-                            │ - DATA_INC           │
+│ - MATRICULA      │        │ - DATA_INC           │
+│ - FAILED_ATTEMPTS│        │ - DATA_INC           │
+└─────────────────┘         │ - DATA_ALT           │
                             └──────────────────────┘
                                       │
-                                      │ registra
+                                      │ pode registrar
                                       ▼
                             ┌──────────────────────┐
-                            │     TBACESSO         │
+                            │ Auditoria opcional   │
                             │                      │
-                            │ - ACESSO_ID (PK)     │
-                            │ - CHAVE_ID (Face ID) │
-                            │ - TIPO               │
-                            │ - DATA               │
-                            │ - IP                 │
-                            │ - COMPUTADOR         │
+                            │ Não consta na DDL    │
+                            │ atual enviada        │
+                            │ Criar migration se   │
+                            │ for requisito        │
                             └──────────────────────┘
 ```
 
@@ -437,8 +435,6 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 | FACEID_ID | INTEGER | Identificador único do Face ID | ✅ Sim |
 | USUARIO_ID | INTEGER | Referência ao usuário (FK) | ❌ Não |
 | DESCRIPTOR_FACIAL | BLOB | Características faciais únicas (512 bytes) | ✅ Sim |
-| MATRICULA | VARCHAR(30) | Matrícula do usuário | ❌ Não |
-| ATIVO | CHAR(1) | Status: 'S' (ativo) ou 'N' (inativo) | ✅ Sim |
 | DATA_INC | TIMESTAMP | Data/hora do cadastro | ✅ Sim |
 | USUARIO_I | INTEGER | Usuário que cadastrou | ❌ Não |
 | USUARIONOME_I | VARCHAR(30) | Nome do usuário que cadastrou | ❌ Não |
@@ -450,8 +446,9 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 | USUARIONOME_D | VARCHAR(30) | Nome do usuário que excluiu | ❌ Não |
 
 **Regras:**
-- Um usuário pode ter apenas um Face ID ativo (ATIVO = 'S')
-- Exclusão é lógica (ATIVO = 'N'), dados são mantidos para auditoria
+- `TBUSUARIO_FACEID` não possui `MATRICULA`; use `TBUSUARIO.MATRICULA`
+- `TBUSUARIO_FACEID` não possui `ATIVO`; estado do usuário vem de `TBUSUARIO.BLOQUEADO` e `TBUSUARIO.DELETADO`
+- A DDL atual não possui constraint `UNIQUE` por usuário; a API deve impedir duplicidade se essa for a regra de negócio
 - Somente o descriptor é armazenado no banco de dados
 - A foto não é armazenada, não é enviada ao backend e não participa da auditoria
 
@@ -466,6 +463,7 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 | USUARIO_ID | INTEGER | Identificador único do usuário | Relacionamento com Face ID |
 | NOME | VARCHAR | Nome do usuário | Exibido após autenticação |
 | EMAIL | VARCHAR | E-mail do usuário | Identificação alternativa |
+| MATRICULA | VARCHAR(30) | Matrícula do usuário | Identificação operacional |
 | FAILED_ATTEMPTS | INTEGER | Contador de tentativas falhas | Controle de bloqueio (max: 10) |
 
 **Regras:**
@@ -475,20 +473,22 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 
 ---
 
-### 5.4. Tabela: TBACESSO (Auditoria)
+### 5.4. Auditoria de Acessos
 
-**Descrição:** Tabela existente de auditoria, utilizada para registrar todas as tentativas de autenticação Face ID.
+**Descrição:** A DDL atual enviada não inclui `TBACESSO`. Se o cliente tiver uma tabela de auditoria no metadata real, o backend pode integrá-la. Se não houver, crie uma migration específica antes de exigir logs de tentativa em banco.
 
-| Campo | Tipo | Descrição | Uso no Face ID |
-|-------|------|-----------|----------------|
-| ACESSO_ID | INTEGER | Identificador único do acesso | Chave primária |
-| CHAVE_ID | INTEGER | ID do Face ID (FACEID_ID) | Rastreabilidade |
-| TIPO | VARCHAR | Tipo do evento | 'FACE_ID_AUTH_SUCCESS' ou 'FACE_ID_AUTH_FAILURE' |
-| DATA | TIMESTAMP | Data/hora do acesso | Quando ocorreu |
-| IP | VARCHAR | Endereço IP de origem | De onde veio |
-| COMPUTADOR | VARCHAR | User-Agent do navegador | Qual dispositivo |
-| LOCAL | VARCHAR | Origem do acesso | 'WEB_FACE_ID' |
-| DETALHES | VARCHAR | Informações adicionais | JSON com dados extras |
+Campos mínimos recomendados para uma futura tabela de auditoria:
+
+| Campo | Descrição |
+|-------|-----------|
+| ID do evento | Chave primária do log |
+| `FACEID_ID` | ID do Face ID quando houver match |
+| `USUARIO_ID` | Usuário autenticado ou alvo da tentativa |
+| `TIPO` | Sucesso, falha, cadastro, atualização ou remoção |
+| `DATA` | Data/hora do evento |
+| `IP` | Endereço IP de origem |
+| `COMPUTADOR` | Identificação do terminal ou navegador |
+| `DETALHES` | Dados técnicos do match, sem armazenar foto |
 
 **Tipos de Eventos:**
 - `FACE_ID_AUTH_SUCCESS`: Autenticação bem-sucedida
@@ -577,11 +577,11 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 **Controle de Acesso:**
 - 👤 Usuário comum: Acessa apenas seus próprios dados
 - 👨‍💼 Administrador: Acessa dados de todos os usuários (com auditoria)
-- 🔐 Logs de acesso registrados na TBACESSO
+- 🔐 Logs de acesso registrados conforme tabela de auditoria disponível ou migration aprovada
 
 **Retenção de Dados:**
-- 📅 Dados ativos: Mantidos enquanto Face ID estiver ativo
-- 📅 Dados inativos: Mantidos por 90 dias após exclusão (auditoria)
+- 📅 Descriptor vigente: Mantido enquanto o usuário tiver consentimento e regra de negócio ativa
+- 📅 Descriptor removido: Deve ser excluído ou tratado por inativação lógica somente se houver migration específica
 - 📅 Histórico de acessos: Mantido por no mínimo 90 dias
 
 ---
@@ -612,7 +612,7 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 | CA-004 | Taxa de Falsos Positivos | Menor que 1% (não autenticar pessoa errada) |
 | CA-005 | Taxa de Falsos Negativos | Menor que 10% (não reconhecer usuário correto) |
 | CA-006 | Disponibilidade | Sistema disponível 99% do tempo |
-| CA-007 | Auditoria | 100% das tentativas registradas na TBACESSO |
+| CA-007 | Auditoria | 100% das tentativas registradas conforme mecanismo de auditoria aprovado |
 
 ---
 
@@ -658,11 +658,11 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 
 | Restrição | Descrição | Justificativa |
 |-----------|-----------|---------------|
-| **Um Face ID por Usuário** | Cada usuário pode ter apenas um cadastro ativo | Simplificação e segurança |
+| **Um Face ID por Usuário** | Cada usuário deve ter apenas um cadastro vigente, validado pela API ou por migration futura | Simplificação e segurança |
 | **Apenas Desktop** | Fase inicial apenas para desktop (não mobile) | Foco na implementação web |
 | **Threshold Fixo** | Similaridade mínima de 60% (não configurável pelo usuário) | Balanceamento segurança/usabilidade |
 | **Descriptor Obrigatório** | O descriptor facial é armazenado obrigatoriamente | Autenticação e rastreabilidade sem persistir foto |
-| **Exclusão Lógica** | Dados não são deletados fisicamente | Conformidade e auditoria |
+| **Remoção de Biometria** | Descriptor deve ser removido ou inativado apenas se houver campo criado por migration | Conformidade com LGPD |
 
 ---
 
@@ -700,7 +700,7 @@ O sistema utiliza **3 tabelas principais** para gerenciar Face ID:
 | **Threshold** | Limite mínimo de similaridade (60%) para considerar autenticação bem-sucedida |
 | **Match** | Correspondência entre rosto capturado e cadastro no banco de dados |
 | **BLOB** | Binary Large Object - tipo de dado para armazenar dados binários, usado aqui para o descriptor |
-| **Exclusão Lógica** | Marcar registro como inativo (ATIVO='N') sem deletar fisicamente |
+| **Remoção de Face ID** | Remover o descriptor biométrico ou usar inativação lógica somente após migration específica |
 | **Auditoria** | Registro completo de todas as operações para rastreabilidade |
 | **LGPD** | Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018) |
 | **Falso Positivo** | Sistema autentica pessoa errada (grave) |

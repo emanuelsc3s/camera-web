@@ -186,7 +186,7 @@ async function registerFaceId(data) {
   // Verificar se usuário já possui Face ID
   if (usuarioId) {
     const existing = await getFaceIdByUsuarioId(usuarioId)
-    if (existing && existing.ATIVO === 'S') {
+    if (existing) {
       throw new Error('Usuário já possui Face ID cadastrado')
     }
   }
@@ -201,12 +201,11 @@ async function registerFaceId(data) {
     if (!finalUsuarioId && (email || matricula)) {
       // Buscar usuário existente por email ou matrícula
       const sqlFindUser = `
-        SELECT USUARIO_ID
+        SELECT FIRST 1 USUARIO_ID
         FROM TBUSUARIO
-        WHERE EMAIL = ? OR NOME = ?
-        LIMIT 1
+        WHERE EMAIL = ? OR MATRICULA = ? OR NOME = ?
       `
-      const existingUser = await db.query(sqlFindUser, [email || '', name])
+      const existingUser = await db.query(sqlFindUser, [email || '', matricula || '', name])
 
       if (existingUser.length > 0) {
         finalUsuarioId = existingUser[0].USUARIO_ID
@@ -218,19 +217,16 @@ async function registerFaceId(data) {
       INSERT INTO TBUSUARIO_FACEID (
         USUARIO_ID,
         DESCRIPTOR_FACIAL,
-        MATRICULA,
-        ATIVO,
         USUARIO_I,
         USUARIONOME_I
       )
-      VALUES (?, ?, ?, 'S', ?, ?)
+      VALUES (?, ?, ?, ?)
       RETURNING FACEID_ID
     `
 
     const result = await db.query(sqlInsert, [
       finalUsuarioId || null,
       descriptorBuffer,
-      matricula || null,
       finalUsuarioId || null,
       name
     ])
@@ -266,18 +262,21 @@ async function authenticateFaceId(data) {
   }
 
   try {
-    // 1. Buscar todos os descritores ativos
+    // 1. Buscar descritores vinculados a usuários ativos
     const sqlGetAll = `
       SELECT
         f.FACEID_ID,
         f.USUARIO_ID,
         f.DESCRIPTOR_FACIAL,
-        f.MATRICULA,
         u.NOME,
-        u.EMAIL
+        u.EMAIL,
+        u.MATRICULA,
+        u.DELETADO,
+        u.BLOQUEADO
       FROM TBUSUARIO_FACEID f
-      LEFT JOIN TBUSUARIO u ON u.USUARIO_ID = f.USUARIO_ID
-      WHERE f.ATIVO = 'S'
+      JOIN TBUSUARIO u ON u.USUARIO_ID = f.USUARIO_ID
+      WHERE COALESCE(u.DELETADO, 'N') = 'N'
+        AND COALESCE(u.BLOQUEADO, 'N') = 'N'
     `
 
     const faceIdUsers = await db.query(sqlGetAll)
@@ -302,7 +301,7 @@ async function authenticateFaceId(data) {
     // 3. Encontrar melhor match
     const bestMatch = vectorMath.findBestMatch(descriptor, candidates, threshold)
 
-    // 4. Registrar acesso na TBACESSO
+    // 4. Registrar acesso na auditoria disponível no cliente
     await registerFaceIdAccess({
       faceIdId: bestMatch?.isMatch ? bestMatch.faceIdId : null,
       usuarioId: bestMatch?.isMatch ? bestMatch.usuarioId : null,
@@ -414,7 +413,8 @@ async function registerFaceIdAccess(data) {
         threshold: 0.6
       })
 
-  // 3. Registrar na TBACESSO (auditoria)
+  // 3. Registrar em tabela de auditoria, se o metadata do cliente disponibilizar uma.
+  // O exemplo abaixo usa TBACESSO apenas quando ela existir no banco.
   const sql = `
     INSERT INTO TBACESSO (
       DATA,
@@ -450,16 +450,16 @@ async function registerFaceIdAccess(data) {
 async function getFaceIdByUsuarioId(usuarioId) {
   const sql = `
     SELECT
-      FACEID_ID,
-      USUARIO_ID,
-      MATRICULA,
-      ATIVO,
-      DATA_INC,
-      DATA_ALT
-    FROM TBUSUARIO_FACEID
-    WHERE USUARIO_ID = ?
+      f.FACEID_ID,
+      f.USUARIO_ID,
+      f.DATA_INC,
+      f.DATA_ALT,
+      u.MATRICULA
+    FROM TBUSUARIO_FACEID f
+    LEFT JOIN TBUSUARIO u ON u.USUARIO_ID = f.USUARIO_ID
+    WHERE f.USUARIO_ID = ?
     ORDER BY DATA_INC DESC
-    LIMIT 1
+    ROWS 1
   `
 
   const result = await db.query(sql, [usuarioId])
@@ -475,11 +475,11 @@ async function listFaceIdUsers(filters = {}) {
   const { page = 1, limit = 50, search } = filters
   const offset = (page - 1) * limit
 
-  let whereClause = 'WHERE f.ATIVO = \'S\''
+  let whereClause = "WHERE COALESCE(u.DELETADO, 'N') = 'N'"
   const params = []
 
   if (search) {
-    whereClause += ' AND (u.NOME LIKE ? OR f.MATRICULA LIKE ?)'
+    whereClause += ' AND (u.NOME LIKE ? OR u.MATRICULA LIKE ?)'
     params.push(`%${search}%`, `%${search}%`)
   }
 
@@ -487,12 +487,13 @@ async function listFaceIdUsers(filters = {}) {
     SELECT
       f.FACEID_ID,
       f.USUARIO_ID,
-      f.MATRICULA,
-      f.ATIVO,
       f.DATA_INC,
       f.DATA_ALT,
       u.NOME,
-      u.EMAIL
+      u.EMAIL,
+      u.MATRICULA,
+      u.DELETADO,
+      u.BLOQUEADO
     FROM TBUSUARIO_FACEID f
     LEFT JOIN TBUSUARIO u ON u.USUARIO_ID = f.USUARIO_ID
     ${whereClause}
@@ -535,20 +536,13 @@ async function getFaceIdById(faceIdId) {
     SELECT
       f.FACEID_ID,
       f.USUARIO_ID,
-      f.MATRICULA,
-      f.ATIVO,
       f.DATA_INC,
       f.DATA_ALT,
       u.NOME,
       u.EMAIL,
-      (SELECT COUNT(*) FROM TBACESSO a
-       WHERE a.CHAVE_ID = f.FACEID_ID
-       AND a.LOCAL = 'WEB_FACE_ID'
-       AND a.DATA >= DATEADD(-7 DAY TO CURRENT_TIMESTAMP)) as ACESSOS_RECENTES,
-      (SELECT MAX(a.DATA) FROM TBACESSO a
-       WHERE a.CHAVE_ID = f.FACEID_ID
-       AND a.LOCAL = 'WEB_FACE_ID'
-       AND a.TIPO = 'FACE_ID_AUTH_SUCCESS') as ULTIMO_ACESSO
+      u.MATRICULA,
+      u.DELETADO,
+      u.BLOQUEADO
     FROM TBUSUARIO_FACEID f
     LEFT JOIN TBUSUARIO u ON u.USUARIO_ID = f.USUARIO_ID
     WHERE f.FACEID_ID = ?
@@ -591,26 +585,24 @@ async function updateFaceId(faceIdId, data) {
 }
 
 /**
- * Remove Face ID (soft delete)
+ * Remove Face ID
  * @param {number} faceIdId - ID do Face ID
  * @param {Object} user - Usuário que está excluindo
  */
 async function deleteFaceId(faceIdId, user) {
-  const sql = `
-    UPDATE TBUSUARIO_FACEID
-    SET
-      ATIVO = 'N',
-      DATA_DEL = CURRENT_TIMESTAMP,
-      USUARIO_D = ?,
-      USUARIONOME_D = ?
+  // A DDL atual não possui ATIVO/DELETADO em TBUSUARIO_FACEID.
+  // Para atender remoção de dado biométrico, remova o descriptor.
+  // Se o cliente exigir retenção com inativação, crie uma migration específica.
+  // Registre a solicitação em uma tabela de auditoria externa, se existir.
+  await db.query(`
+    DELETE FROM TBUSUARIO_FACEID
     WHERE FACEID_ID = ?
-  `
-
-  await db.query(sql, [user.id, user.name, faceIdId])
+  `, [faceIdId])
 }
 
 /**
- * Busca histórico de acessos por Face ID (usando TBACESSO)
+ * Busca histórico de acessos por Face ID quando existir tabela de auditoria.
+ * A DDL atual enviada não inclui TBACESSO; este exemplo é opcional.
  * @param {number} faceIdId - ID do Face ID
  * @param {Object} filters - Filtros
  * @returns {Promise<Object>} Lista paginada
@@ -683,14 +675,14 @@ function formatFaceIdUser(record) {
     descriptorOnly: true,
     createdAt: record.DATA_INC,
     updatedAt: record.DATA_ALT,
-    ativo: record.ATIVO === 'S',
+    ativo: record.DELETADO !== 'S' && record.BLOQUEADO !== 'S',
     acessosRecentes: record.ACESSOS_RECENTES || 0,
     ultimoAcesso: record.ULTIMO_ACESSO
   }
 }
 
 /**
- * Formata dados do acesso (TBACESSO) para resposta
+ * Formata dados do acesso para resposta
  */
 function formatAccessRecord(record) {
   let detalhes = {}

@@ -17,7 +17,7 @@ Este documento apresenta uma visão geral da arquitetura de integração entre a
 
 ### Documentação Face ID (Sistema de Reconhecimento Facial)
 - **[07-face-id-backend-api.md](./07-face-id-backend-api.md)** - API REST para reconhecimento facial (8 endpoints)
-- **[08-face-id-database-schema.md](./08-face-id-database-schema.md)** - Modelagem completa do banco de dados (TBUSUARIO_FACEID, TBACESSO para auditoria)
+- **[08-face-id-database-schema.md](./08-face-id-database-schema.md)** - Modelagem atual do banco de dados (`TBUSUARIO`, `TBUSUARIO_FACEID` e `TBINSPECAO_MANUAL`)
 - **[09-face-id-backend-implementation.md](./09-face-id-backend-implementation.md)** - Implementação completa do backend (services, controllers, utils)
 - **[10-face-id-security-flows.md](./10-face-id-security-flows.md)** - Fluxos de segurança, LGPD e boas práticas
 
@@ -355,8 +355,8 @@ Este documento apresenta uma visão geral da arquitetura de integração entre a
 - **Validação:** express-validator
 
 ### Banco de Dados
-- **SGBD:** Firebird 3.0+
-- **Tabelas:** TBOP e TBPRODUTO para referência; TBINSPECAO_MANUAL para gravação deste projeto
+- **SGBD:** Firebird 2.5
+- **Tabelas:** `TBUSUARIO`, `TBUSUARIO_FACEID` e `TBINSPECAO_MANUAL` já existem no banco informado; `TBOP` e `TBPRODUTO` são usadas como referência
 - **Fora do escopo:** TBINSPECAO existente, reservada para o projeto SICFAR
 - **Armazenamento de Fotos:** Sistema de arquivos
 

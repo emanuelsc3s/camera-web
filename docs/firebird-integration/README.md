@@ -49,7 +49,7 @@ Guia completo de implementação do backend:
 - 🔒 Middlewares (CORS, error handler, validators)
 - 🚀 Server.js (entry point)
 - 📦 package.json completo
-- 🗄️ Scripts SQL para criação de tabelas
+- 🗄️ Referência SQL para validar o schema Firebird existente
 - ✅ Testes iniciais
 
 ---
@@ -119,7 +119,7 @@ Plano completo de implementação:
 
 ### Se você vai **implementar o backend:**
 1. 📖 Leia [02-backend-setup.md](./02-backend-setup.md) e [parte 2](./02-backend-setup-parte2.md)
-2. 🗄️ Execute os scripts SQL para criar as tabelas
+2. 🗄️ Valide se o banco já contém `TBUSUARIO`, `TBUSUARIO_FACEID` e `TBINSPECAO_MANUAL` conforme a DDL atual
 3. ⚙️ Configure o .env com suas credenciais Firebird
 4. 🧪 Teste a conexão com o script test-connection.js
 
@@ -186,7 +186,9 @@ LocalStorage (Atual)          →          Firebird + Backend (Futuro)
 - **Firebird** - SGBD relacional open-source
 - **TBOP** - Fonte dos dados de OP, lote, validade, GTIN e ANVISA
 - **TBPRODUTO** - Cadastro de produtos usado para complementar a referência
-- **TBINSPECAO_MANUAL** - Nova tabela de inspeções manuais deste projeto, com `STATUS`, conformes `Sim`/`Não`, auditoria por registro e exclusão lógica
+- **TBUSUARIO** - Cadastro de usuários; contém `MATRICULA` e `FAILED_ATTEMPTS`
+- **TBUSUARIO_FACEID** - Tabela existente de descriptors faciais; não possui `MATRICULA` nem `ATIVO`
+- **TBINSPECAO_MANUAL** - Tabela existente de inspeções manuais deste projeto, com `STATUS`, conformes `Sim`/`Não`, auditoria por registro e exclusão lógica
 - **TBINSPECAO** - Tabela existente fora do escopo; permanece reservada para o projeto SICFAR
 - **Generators/Triggers** - Auto-incremento de IDs
 

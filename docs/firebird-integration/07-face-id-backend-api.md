@@ -75,7 +75,7 @@ Este documento especifica os endpoints da API REST necessários para suportar o 
 │  │  - Validação de descritores faciais              │ │
 │  │  - Matching de vetores (similaridade)            │ │
 │  │  - Cadastro e matching por descriptor            │ │
-│  │  - Auditoria via TBACESSO                        │ │
+│  │  - Auditoria conforme metadata disponível         │ │
 │  └──────────────────────────────────────────────────┘ │
 │                      ↓                                  │
 │  ┌──────────────────────────────────────────────────┐ │
@@ -93,19 +93,17 @@ Este documento especifica os endpoints da API REST necessários para suportar o 
 │  └──────────────────────────────────────────────────┘ │
 │                      ↑                                  │
 │  ┌──────────────────────────────────────────────────┐ │
-│  │  TBUSUARIO_FACEID (nova)                         │ │
+│  │  TBUSUARIO_FACEID (existente)                    │ │
 │  │  - FACEID_ID, USUARIO_ID (FK)                    │ │
 │  │  - DESCRIPTOR_FACIAL (BLOB)                      │ │
-│  │  - MATRICULA, ATIVO                              │ │
+│  │  - DESCRIPTOR_FACIAL                             │ │
 │  │  - Campos de auditoria                           │ │
 │  └──────────────────────────────────────────────────┘ │
 │                                                         │
 │  ┌──────────────────────────────────────────────────┐ │
-│  │  TBACESSO (existente)                            │ │
-│  │  - ACESSO_ID, USUARIO_ID (FK)                    │ │
-│  │  - DATA, TIPO, LOCAL                             │ │
-│  │  - ATIVIDADE (JSON), IP, CHAVE_ID                │ │
-│  │  - Usado para auditoria de Face ID               │ │
+│  │  Auditoria de acesso                             │ │
+│  │  - Opcional; depende do metadata do cliente       │ │
+│  │  - Não está na DDL atual enviada                  │ │
 │  └──────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -257,7 +255,7 @@ Autentica usuário através de reconhecimento facial.
 - A cada falha de autenticação, o campo **TBUSUARIO.FAILED_ATTEMPTS** é incrementado em 1
 - Quando a autenticação é bem-sucedida, **FAILED_ATTEMPTS** é zerado
 - Se **FAILED_ATTEMPTS >= 10**, o usuário é bloqueado e retorna erro 403
-- A tabela **TBACESSO** registra todas as tentativas para auditoria
+- A auditoria em tabela de acessos depende do metadata real do cliente; a DDL atual enviada não inclui `TBACESSO`
 
 ---
 
@@ -384,7 +382,7 @@ Remove o cadastro de Face ID de um usuário (soft delete).
 
 ### GET `/face-id/users/:id/access-history`
 
-Lista histórico de acessos (autenticações) de um usuário via Face ID usando a tabela TBACESSO.
+Lista histórico de acessos (autenticações) de um usuário via Face ID quando houver tabela de auditoria disponível no metadata do cliente.
 
 **Query Parameters:**
 - `page` (number, opcional) - Número da página (padrão: 1)
@@ -472,7 +470,7 @@ function isMatch(distance, threshold = 0.6) {
 **Requisitos:**
 - ✅ Consentimento explícito do usuário
 - ✅ Criptografia dos descritores em repouso
-- ✅ Auditoria de acessos via TBACESSO
+- ✅ Auditoria de acessos conforme tabela disponível ou migration aprovada
 - ✅ Direito ao esquecimento (soft delete)
 - ✅ Minimização de dados (apenas descriptor, não imagem completa)
 - ✅ Logs de acesso com retenção limitada
@@ -482,8 +480,8 @@ function isMatch(distance, threshold = 0.6) {
 - DATA_ALT, USUARIO_A, USUARIONOME_A (alteração)
 - DATA_DEL, USUARIO_D, USUARIONOME_D (exclusão)
 
-**Auditoria de Tentativas (TBACESSO):**
-- Todos os eventos de autenticação são registrados na tabela TBACESSO
+**Auditoria de Tentativas:**
+- Eventos de autenticação devem ser registrados somente em tabela existente no metadata do cliente ou em estrutura criada por migration específica
 - LOCAL = 'WEB_FACE_ID'
 - TIPO = 'FACE_ID_AUTH_SUCCESS' ou 'FACE_ID_AUTH_FAILED'
 - ATIVIDADE contém JSON com detalhes da tentativa

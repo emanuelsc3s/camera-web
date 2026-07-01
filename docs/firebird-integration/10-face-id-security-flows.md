@@ -248,9 +248,9 @@ module.exports = { registerValidation }
      │              │               │  ATTEMPTS=0 │
      │              │               ├─────────────►│
      │              │               │              │
-     │              │               │ 14. INSERT  │
-     │              │               │  TBACESSO   │
-     │              │               │  (auditoria)│
+     │              │               │ 14. Registra│
+     │              │               │  auditoria  │
+     │              │               │  opcional   │
      │              │               ├─────────────►│
      │              │               │              │
      │              │ 15. 200 OK   │              │
@@ -273,7 +273,7 @@ module.exports = { registerValidation }
 **Observação:** Se a autenticação falhar, o fluxo seria:
 - **Passo 13**: UPDATE TBUSUARIO SET FAILED_ATTEMPTS = FAILED_ATTEMPTS + 1
 - **Passo 14**: Verificar se FAILED_ATTEMPTS >= 10 (bloqueio)
-- **Passo 15**: INSERT TBACESSO com TIPO='FACE_ID_AUTH_FAILED'
+- **Passo 15**: Registrar auditoria de falha se houver tabela de auditoria no metadata do cliente
 - **Passo 16**: Retornar erro 401 ou 403 (se bloqueado)
 
 ```
@@ -457,7 +457,7 @@ https.createServer(options, app).listen(443)
 
 -- 1. Criptografar no backend antes de salvar
 -- 2. Usar criptografia de disco (LUKS, BitLocker)
--- 3. Migrar para Firebird 3.0+ com suporte a criptografia
+-- 3. Avaliar upgrade futuro do Firebird ou criptografia no backend, se o cliente exigir criptografia em repouso
 ```
 
 **Exemplo de Criptografia no Backend:**
@@ -601,12 +601,7 @@ router.post('/admin/reset-failed-attempts/:usuarioId', async (req, res) => {
 
     await db.query(sql, [usuarioId])
 
-    // Registrar ação na TBACESSO
-    await db.query(`
-      INSERT INTO TBACESSO (DATA, USUARIO_ID, LOCAL, TIPO, ATIVIDADE, IP)
-      VALUES (CURRENT_TIMESTAMP, ?, 'WEB_FACE_ID', 'FACE_ID_RESET_ATTEMPTS',
-              '{"evento":"reset_tentativas","admin":"${req.user.nome}"}', ?)
-    `, [usuarioId, req.ip])
+    // Se existir uma tabela de auditoria no metadata do cliente, registre o reset nela.
 
     res.json({ success: true, message: 'Tentativas resetadas com sucesso' })
   } catch (error) {
@@ -629,13 +624,7 @@ router.get('/admin/blocked-users', async (req, res) => {
         u.NOME,
         u.EMAIL,
         u.FAILED_ATTEMPTS,
-        f.MATRICULA,
-        f.ATIVO AS FACEID_ATIVO,
-        (SELECT MAX(a.DATA)
-         FROM TBACESSO a
-         WHERE a.USUARIO_ID = u.USUARIO_ID
-           AND a.LOCAL = 'WEB_FACE_ID'
-           AND a.TIPO = 'FACE_ID_AUTH_FAILED') AS ULTIMA_FALHA
+        u.MATRICULA
       FROM TBUSUARIO u
       LEFT JOIN TBUSUARIO_FACEID f ON f.USUARIO_ID = u.USUARIO_ID
       WHERE u.FAILED_ATTEMPTS >= 10
@@ -744,7 +733,7 @@ async function checkUserBlocked(usuarioId) {
 }
 ```
 
-**2. Verificar tentativas falhas por IP (detecção de ataques):**
+**2. Verificar tentativas falhas por IP (detecção de ataques, se houver tabela de auditoria):**
 ```javascript
 // Verificar tentativas falhas por IP (últimos 15 minutos)
 async function checkSuspiciousActivityByIP(ipOrigem) {
@@ -958,18 +947,22 @@ test('Rejeita descriptor inválido', async () => {
 - Distância média dos matches bem-sucedidos
 - Distribuição de confiança dos matches
 
-### 5.2 Dashboard de Monitoramento (usando TBACESSO)
+### 5.2 Dashboard de Monitoramento (opcional, se houver tabela de auditoria)
 
 ```sql
 -- Query para dashboard
 SELECT
   COUNT(DISTINCT f.FACEID_ID) as TOTAL_CADASTROS,
-  COUNT(DISTINCT CASE WHEN f.ATIVO = 'S' THEN f.FACEID_ID END) as CADASTROS_ATIVOS,
+  COUNT(DISTINCT CASE
+    WHEN COALESCE(u.DELETADO, 'N') = 'N' AND COALESCE(u.BLOQUEADO, 'N') = 'N'
+    THEN f.FACEID_ID
+  END) as CADASTROS_COM_USUARIO_ATIVO,
   COUNT(a.ACESSO_ID) as TOTAL_TENTATIVAS_HOJE,
   COUNT(CASE WHEN a.TIPO = 'FACE_ID_AUTH_SUCCESS' THEN 1 END) as TENTATIVAS_SUCESSO_HOJE,
   CAST(COUNT(CASE WHEN a.TIPO = 'FACE_ID_AUTH_SUCCESS' THEN 1 END) AS FLOAT) /
     NULLIF(COUNT(a.ACESSO_ID), 0) * 100 as TAXA_SUCESSO_PCT
 FROM TBUSUARIO_FACEID f
+LEFT JOIN TBUSUARIO u ON u.USUARIO_ID = f.USUARIO_ID
 LEFT JOIN TBACESSO a ON a.CHAVE_ID = f.FACEID_ID
   AND a.LOCAL = 'WEB_FACE_ID'
   AND a.TIPO LIKE 'FACE_ID_AUTH%'

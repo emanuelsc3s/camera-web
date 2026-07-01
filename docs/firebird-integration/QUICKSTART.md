@@ -89,17 +89,17 @@ CORS_ORIGIN=http://localhost:8080
 
 ---
 
-### 4️⃣ Backend - Criar Tabela Manual Firebird (30 min)
+### 4️⃣ Backend - Validar Schema Firebird (30 min)
 
-**Executar SQL** (usando isql, FlameRobin ou outro cliente):
+**Validar metadata** (usando isql, FlameRobin ou outro cliente):
 
 ```sql
--- Script em 02-backend-setup-parte2.md seção 12.1
--- Pré-requisitos: TBOP e TBPRODUTO já existem no banco.
--- Não usar a tabela TBINSPECAO existente; ela é reservada ao SICFAR.
--- Incluir LINHAPRODUCAO_ID, FASE, STATUS, conformes VARCHAR(3) e auditoria por registro.
-CREATE TABLE TBINSPECAO_MANUAL (...);
--- Generators, triggers, índices...
+-- Referência em 02-backend-setup-parte2.md seção 12.1
+-- As tabelas TBUSUARIO, TBUSUARIO_FACEID e TBINSPECAO_MANUAL já existem no banco informado.
+-- Não recriar tabelas no cliente; apenas comparar o metadata antes de gerar nova migration.
+SELECT RDB$RELATION_NAME
+FROM RDB$RELATIONS
+WHERE RDB$RELATION_NAME IN ('TBUSUARIO', 'TBUSUARIO_FACEID', 'TBINSPECAO_MANUAL');
 ```
 
 ---
@@ -203,7 +203,8 @@ Ver detalhes em [05-deployment-options.md](./05-deployment-options.md#3-opção-
 ### Backend
 - [ ] Node.js >= 18 instalado
 - [ ] Firebird rodando e acessível
-- [ ] `TBINSPECAO_MANUAL` criada com `LINHAPRODUCAO_ID`, `FASE`, `STATUS`, conformes `VARCHAR(3)` e auditoria
+- [ ] `TBUSUARIO`, `TBUSUARIO_FACEID` e `TBINSPECAO_MANUAL` validadas contra a DDL atual
+- [ ] `TBUSUARIO_FACEID` sem dependência de `MATRICULA` ou `ATIVO`
 - [ ] `TBOP` e `TBPRODUTO` existentes e acessíveis
 - [ ] Dependências instaladas (`npm install`)
 - [ ] `.env` configurado
