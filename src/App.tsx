@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
+import { RequireAuth } from '@/components/auth/RequireAuth'
 import Layout from '@/components/layout/Layout'
 import HomePage from '@/pages/HomePage'
 import ConsultaPage from '@/pages/ConsultaPage'
@@ -10,7 +11,14 @@ function App() {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/" element={<Layout />}>
+        <Route
+          path="/"
+          element={
+            <RequireAuth>
+              <Layout />
+            </RequireAuth>
+          }
+        >
           <Route index element={<HomePage />} />
           <Route path="consulta" element={<ConsultaPage />} />
         </Route>

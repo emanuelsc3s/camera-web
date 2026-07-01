@@ -41,8 +41,9 @@ test('registerFaceIdEvent grava auditoria em TBACESSO com campos truncados', asy
   assert.match(calls[0].sql, /INSERT INTO TBACESSO/);
   assert.equal(calls[0].params[0], 10);
   assert.equal(calls[0].params[1].length, 30);
-  assert.equal(calls[0].params[2], 'FACE_ID_AUTH_SUCCESS');
-  assert.equal(calls[0].params[4].length, 15);
-  assert.equal(calls[0].params[5].length, 30);
-  assert.equal(calls[0].params[6], 22);
+  assert.equal(calls[0].params[2], 'WEB_FACE_ID');
+  assert.equal(calls[0].params[3], 'FACE_ID_AUTH_SUCCESS');
+  assert.equal(calls[0].params[6].length, 15);
+  assert.equal(calls[0].params[7].length, 30);
+  assert.equal(calls[0].params[8], 22);
 });

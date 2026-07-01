@@ -151,7 +151,8 @@ test('POST /api/face-id/register persiste somente descriptor e audita cadastro',
     assert.equal(result.body.data.descriptorOnly, true);
     assert.ok(Buffer.isBuffer(insertFaceId.params[2]));
     assert.equal(insertFaceId.params[2].length, vectorMath.DESCRIPTOR_BYTES);
-    assert.equal(insertAudit.params[2], 'FACE_ID_REGISTER');
+    assert.equal(insertAudit.params[2], 'WEB_FACE_ID');
+    assert.equal(insertAudit.params[3], 'FACE_ID_REGISTER');
     assert.doesNotMatch(JSON.stringify(mockDatabase.calls), /photoBase64|fotoBase64|image\/jpeg/i);
   } finally {
     await server.close();
@@ -193,8 +194,9 @@ test('POST /api/face-id/authenticate autentica por distancia euclidiana e regist
     assert.equal(result.body.data.confidence, 1);
     assert.equal(typeof result.body.token, 'string');
     assert.equal(resetAttempts.params[0], 12);
-    assert.equal(insertAudit.params[2], 'FACE_ID_AUTH_SUCCESS');
-    assert.match(insertAudit.params[3], /autenticacao_facial/);
+    assert.equal(insertAudit.params[2], 'WEB_FACE_ID');
+    assert.equal(insertAudit.params[3], 'FACE_ID_AUTH_SUCCESS');
+    assert.match(insertAudit.params[4], /autenticacao_facial/);
   } finally {
     await server.close();
   }

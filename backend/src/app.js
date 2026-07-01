@@ -27,6 +27,7 @@ app.get('/', (req, res) => {
     versao: '0.1.0',
     status: 'online',
     endpoints: {
+      auth: `${env.apiPrefix}/auth`,
       health: `${env.apiPrefix}/health`,
       faceId: `${env.apiPrefix}/face-id`,
       inspecoes: `${env.apiPrefix}/inspecoes`,

@@ -11,6 +11,14 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/useAuth'
 import { FaceIdModal } from '@/components/face-id/FaceIdModal'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 // Esquema de validação do formulário de login usando Zod
 const loginSchema = z.object({
@@ -26,11 +34,44 @@ const loginSchema = z.object({
 
 export type LoginFormValues = z.infer<typeof loginSchema>
 
+const passwordChangeSchema = z
+  .object({
+    newPassword: z
+      .string()
+      .min(6, 'A senha deve ter pelo menos 6 caracteres')
+      .max(128, 'A senha informada é muito longa')
+      .regex(/[A-Za-zÀ-ÿ]/u, 'Informe ao menos uma letra')
+      .regex(/\d/u, 'Informe ao menos um número')
+      .regex(/[^A-Za-zÀ-ÿ0-9]/u, 'Informe ao menos um caractere especial'),
+    confirmPassword: z
+      .string()
+      .min(1, 'Confirme a nova senha')
+      .max(128, 'A confirmação informada é muito longa'),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    path: ['confirmPassword'],
+    message: 'As senhas informadas não conferem',
+  })
+
+type PasswordChangeFormValues = z.infer<typeof passwordChangeSchema>
+
 export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, isAuthenticated, isLoading, loginError, token } = useAuth()
+  const {
+    login,
+    changeExpiredPassword,
+    clearPasswordExpired,
+    isAuthenticated,
+    isChangingExpiredPassword,
+    isLoading,
+    loginError,
+    passwordChangeError,
+    passwordExpired,
+    token,
+  } = useAuth()
   const [faceIdModalOpen, setFaceIdModalOpen] = useState(false)
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState<string | null>(null)
   const isFaceIdSession = Boolean(token?.startsWith('faceid:'))
 
   // Caminho para redirecionar após login bem-sucedido (padrão: home)
@@ -46,9 +87,9 @@ export default function LoginPage() {
   }, [isAuthenticated, isFaceIdSession, fromPath, navigate])
 
   const {
-    register,
-    handleSubmit,
-    formState: { errors },
+    register: registerLogin,
+    handleSubmit: handleLoginSubmit,
+    formState: { errors: loginErrors },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -57,14 +98,55 @@ export default function LoginPage() {
     },
   })
 
+  const {
+    register: registerPasswordChange,
+    handleSubmit: handlePasswordChangeSubmit,
+    reset: resetPasswordChangeForm,
+    formState: { errors: passwordChangeErrors },
+  } = useForm<PasswordChangeFormValues>({
+    resolver: zodResolver(passwordChangeSchema),
+    defaultValues: {
+      newPassword: '',
+      confirmPassword: '',
+    },
+  })
+
+  useEffect(() => {
+    if (passwordExpired) {
+      resetPasswordChangeForm()
+      setPasswordChangeSuccess(null)
+    }
+  }, [passwordExpired, resetPasswordChangeForm])
+
   // Envio do formulário de login
   const onSubmit = async (data: LoginFormValues) => {
+    setPasswordChangeSuccess(null)
     await login({
       username: data.username,
       password: data.password,
     })
     // Se não houver erro, o AuthProvider já terá atualizado o estado
     // e o useEffect acima fará o redirecionamento
+  }
+
+  const onPasswordChangeSubmit = async (data: PasswordChangeFormValues) => {
+    try {
+      await changeExpiredPassword({
+        newPassword: data.newPassword,
+        confirmPassword: data.confirmPassword,
+      })
+      resetPasswordChangeForm()
+      setPasswordChangeSuccess('Senha alterada com sucesso. Entre novamente usando a nova senha.')
+    } catch {
+      // O AuthProvider mantém a mensagem de erro para o modal.
+    }
+  }
+
+  const handlePasswordExpiredOpenChange = (open: boolean) => {
+    if (!open && !isChangingExpiredPassword) {
+      clearPasswordExpired()
+      resetPasswordChangeForm()
+    }
   }
 
   return (
@@ -148,7 +230,7 @@ export default function LoginPage() {
             </CardHeader>
 
             <CardContent className="px-6 pb-8 pt-2">
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+              <form onSubmit={handleLoginSubmit(onSubmit)} className="space-y-5" noValidate>
                 {/* Campo de Usuário */}
                 <div className="space-y-2">
                   <Label htmlFor="username" className="text-sm font-medium">
@@ -159,18 +241,18 @@ export default function LoginPage() {
                     type="text"
                     autoComplete="username"
                     placeholder="Digite seu usuário"
-                    aria-invalid={!!errors.username}
-                    aria-describedby={errors.username ? 'username-error' : undefined}
+                    aria-invalid={!!loginErrors.username}
+                    aria-describedby={loginErrors.username ? 'username-error' : undefined}
                     disabled={isLoading}
                     className="h-11 text-base transition-shadow focus:shadow-md"
-                    {...register('username')}
+                    {...registerLogin('username')}
                   />
-                  {errors.username && (
+                  {loginErrors.username && (
                     <p
                       id="username-error"
                       className="text-sm text-destructive flex items-center gap-1"
                     >
-                      {errors.username.message}
+                      {loginErrors.username.message}
                     </p>
                   )}
                 </div>
@@ -185,18 +267,27 @@ export default function LoginPage() {
                     type="password"
                     autoComplete="current-password"
                     placeholder="Digite sua senha"
-                    aria-invalid={!!errors.password}
-                    aria-describedby={errors.password ? 'password-error' : undefined}
+                    aria-invalid={!!loginErrors.password}
+                    aria-describedby={loginErrors.password ? 'password-error' : undefined}
                     disabled={isLoading}
                     className="h-11 text-base transition-shadow focus:shadow-md"
-                    {...register('password')}
+                    {...registerLogin('password')}
                   />
-                  {errors.password && (
+                  {loginErrors.password && (
                     <p id="password-error" className="text-sm text-destructive flex items-center gap-1">
-                      {errors.password.message}
+                      {loginErrors.password.message}
                     </p>
                   )}
                 </div>
+
+                {Boolean(passwordChangeSuccess) && (
+                  <div
+                    role="status"
+                    className="rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700"
+                  >
+                    {passwordChangeSuccess}
+                  </div>
+                )}
 
                 {/* Mensagem de erro de login */}
                 {Boolean(loginError) && (
@@ -204,7 +295,7 @@ export default function LoginPage() {
                     role="alert"
                     className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive"
                   >
-                    Não foi possível realizar o login. Verifique suas credenciais e tente novamente.
+                    {loginError}
                   </div>
                 )}
 
@@ -245,6 +336,94 @@ export default function LoginPage() {
         open={faceIdModalOpen}
         onOpenChange={setFaceIdModalOpen}
       />
+
+      <Dialog
+        open={Boolean(passwordExpired)}
+        onOpenChange={handlePasswordExpiredOpenChange}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Senha expirada</DialogTitle>
+            <DialogDescription>
+              {passwordExpired?.message || 'Informe uma nova senha para continuar.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form
+            className="space-y-4"
+            onSubmit={handlePasswordChangeSubmit(onPasswordChangeSubmit)}
+            noValidate
+          >
+            <div className="space-y-2">
+              <Label htmlFor="newPassword" className="text-sm font-medium">
+                Nova senha
+              </Label>
+              <Input
+                id="newPassword"
+                type="password"
+                autoComplete="new-password"
+                disabled={isChangingExpiredPassword}
+                aria-invalid={!!passwordChangeErrors.newPassword}
+                aria-describedby={passwordChangeErrors.newPassword ? 'new-password-error' : undefined}
+                className="h-11 text-base"
+                {...registerPasswordChange('newPassword')}
+              />
+              {passwordChangeErrors.newPassword && (
+                <p id="new-password-error" className="text-sm text-destructive">
+                  {passwordChangeErrors.newPassword.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword" className="text-sm font-medium">
+                Confirmar nova senha
+              </Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                disabled={isChangingExpiredPassword}
+                aria-invalid={!!passwordChangeErrors.confirmPassword}
+                aria-describedby={passwordChangeErrors.confirmPassword ? 'confirm-password-error' : undefined}
+                className="h-11 text-base"
+                {...registerPasswordChange('confirmPassword')}
+              />
+              {passwordChangeErrors.confirmPassword && (
+                <p id="confirm-password-error" className="text-sm text-destructive">
+                  {passwordChangeErrors.confirmPassword.message}
+                </p>
+              )}
+            </div>
+
+            {Boolean(passwordChangeError) && (
+              <div
+                role="alert"
+                className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              >
+                {passwordChangeError}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handlePasswordExpiredOpenChange(false)}
+                disabled={isChangingExpiredPassword}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isChangingExpiredPassword}>
+                {isChangingExpiredPassword && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                )}
+                Alterar senha
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

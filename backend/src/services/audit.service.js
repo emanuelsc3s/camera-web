@@ -28,9 +28,15 @@ function safeJson(data) {
   }).slice(0, MAX_ATIVIDADE_LENGTH);
 }
 
-async function registerFaceIdEvent(data, executor = database) {
-  const atividade = safeJson(data.atividade || {});
+function formatAtividade(atividade) {
+  if (atividade && typeof atividade === 'object') {
+    return safeJson(atividade);
+  }
 
+  return truncate(atividade || '', MAX_ATIVIDADE_LENGTH);
+}
+
+async function registerAccessEvent(data, executor = database) {
   await executor.query(
     `
       INSERT INTO TBACESSO (
@@ -45,21 +51,38 @@ async function registerFaceIdEvent(data, executor = database) {
         COMPUTADOR,
         CHAVE_ID
       )
-      VALUES (CURRENT_TIMESTAMP, ?, ?, 'WEB_FACE_ID', ?, ?, 'S', ?, ?, ?)
+      VALUES (CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       data.usuarioId || null,
       truncate(data.usuarioNome, MAX_USUARIO_LENGTH),
-      data.tipo,
-      atividade,
+      truncate(data.local, 30),
+      truncate(data.tipo, 30),
+      formatAtividade(data.atividade),
+      truncate(data.online || 'S', 1),
       truncate(data.ip, MAX_IP_LENGTH),
       truncate(data.computador, MAX_COMPUTADOR_LENGTH),
-      data.faceIdId || null,
+      data.chaveId || null,
     ],
   );
 }
 
+async function registerFaceIdEvent(data, executor = database) {
+  await registerAccessEvent({
+    usuarioId: data.usuarioId,
+    usuarioNome: data.usuarioNome,
+    local: 'WEB_FACE_ID',
+    tipo: data.tipo,
+    atividade: data.atividade || {},
+    online: 'S',
+    ip: data.ip,
+    computador: data.computador,
+    chaveId: data.faceIdId,
+  }, executor);
+}
+
 module.exports = {
+  registerAccessEvent,
   registerFaceIdEvent,
   safeJson,
   truncate,

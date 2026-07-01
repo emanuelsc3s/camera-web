@@ -4,6 +4,7 @@ import type { FaceApi, TensorFlowNamespace } from '@/types/faceApi'
 declare global {
   interface ImportMetaEnv {
     readonly VITE_APP_TITLE: string
+    readonly VITE_API_URL?: string
   }
 
   interface ImportMeta {

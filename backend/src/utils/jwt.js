@@ -11,6 +11,17 @@ function signJwt(payload, secret, options = {}) {
   });
 }
 
+function verifyJwt(token, secret) {
+  if (!secret) {
+    return null;
+  }
+
+  return jsonwebtoken.verify(token, secret, {
+    algorithms: ['HS256'],
+  });
+}
+
 module.exports = {
   signJwt,
+  verifyJwt,
 };
