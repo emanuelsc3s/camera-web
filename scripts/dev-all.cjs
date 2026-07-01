@@ -52,5 +52,5 @@ function shutdown(exitCode = 0) {
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
-startProcess('frontend', ['run', 'dev'], rootDir);
+startProcess('frontend', ['run', 'dev:frontend'], rootDir);
 startProcess('backend', ['--prefix', 'backend', 'run', 'dev'], rootDir);
