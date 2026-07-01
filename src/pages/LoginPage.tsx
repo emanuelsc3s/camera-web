@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Loader2, ScanFace, Shield } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -55,9 +55,10 @@ const passwordChangeSchema = z
 
 type PasswordChangeFormValues = z.infer<typeof passwordChangeSchema>
 
+const LOGIN_SUCCESS_PATH = '/consulta'
+
 export default function LoginPage() {
   const navigate = useNavigate()
-  const location = useLocation()
   const {
     login,
     changeExpiredPassword,
@@ -68,24 +69,17 @@ export default function LoginPage() {
     loginError,
     passwordChangeError,
     passwordExpired,
-    token,
   } = useAuth()
   const [faceIdModalOpen, setFaceIdModalOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState<string | null>(null)
-  const isFaceIdSession = Boolean(token?.startsWith('faceid:'))
-
-  // Caminho para redirecionar após login bem-sucedido (padrão: home)
-  const fromPath = (location.state as { from?: string } | null)?.from ?? '/'
 
   // Se o usuário já estiver autenticado, evita exibir tela de login.
-  // Para sessões do Face ID, redireciona direto para a Home.
   useEffect(() => {
     if (!isAuthenticated) return
 
-    const targetPath = isFaceIdSession ? '/' : fromPath
-    navigate(targetPath, { replace: true })
-  }, [isAuthenticated, isFaceIdSession, fromPath, navigate])
+    navigate(LOGIN_SUCCESS_PATH, { replace: true })
+  }, [isAuthenticated, navigate])
 
   const {
     register: registerLogin,
