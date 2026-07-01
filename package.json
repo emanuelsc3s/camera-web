@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/check-env.js && vite",
+    "dev:all": "node scripts/dev-all.cjs",
     "check-env": "node scripts/check-env.js",
     "build": "tsc && vite build",
     "build:dev": "vite build --mode development",
