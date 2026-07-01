@@ -106,6 +106,12 @@ function createBlockedUserError(message, details) {
   });
 }
 
+function formatInvalidPasswordMessage(failedAttempts) {
+  const remainingAttempts = Math.max(MAX_LOGIN_FAILED_ATTEMPTS - failedAttempts, 0);
+
+  return `Nome ou senha inválidos. Você tem ${remainingAttempts} tentativa(s) restante(s).`;
+}
+
 function isUserBlocked(row) {
   return normalizeText(row.BLOQUEADO)?.toUpperCase() === 'S';
 }
@@ -263,6 +269,20 @@ async function registerLoginAudit(tx, user, context, options) {
   }, tx);
 }
 
+async function registerAnonymousLoginAudit(tx, username, context, options) {
+  await auditService.registerAccessEvent({
+    usuarioId: null,
+    usuarioNome: username,
+    local: options.local,
+    tipo: 'Processo',
+    atividade: options.atividade,
+    online: options.online,
+    ip: context.ip,
+    computador: context.computador,
+    chaveId: null,
+  }, tx);
+}
+
 async function login(credentials, context = {}) {
   const username = normalizeText(credentials.username);
   const password = normalizeText(credentials.password);
@@ -279,7 +299,22 @@ async function login(credentials, context = {}) {
     const user = await findUserByName(tx, username);
 
     if (!user) {
-      throw createInvalidCredentialsError();
+      const message = 'Nome ou senha inválidos.';
+
+      await tx.setSessionUser(username);
+      await registerAnonymousLoginAudit(tx, username, context, {
+        local: 'CAD001',
+        online: 'N',
+        atividade: `${username}, ${message} Usuário não identificado.`,
+      });
+
+      return {
+        error: {
+          status: 401,
+          message,
+          code: 'CREDENCIAIS_INVALIDAS',
+        },
+      };
     }
 
     await tx.setSessionUser(user.NOME);
@@ -332,10 +367,18 @@ async function login(credentials, context = {}) {
         };
       }
 
+      const message = formatInvalidPasswordMessage(failedAttempts);
+
+      await registerLoginAudit(tx, user, context, {
+        local: 'CAD001',
+        online: 'N',
+        atividade: `${user.NOME}, ${message}`,
+      });
+
       return {
         error: {
           status: 401,
-          message: 'Nome ou senha inválidos.',
+          message,
           code: 'CREDENCIAIS_INVALIDAS',
           details: {
             failedAttempts,

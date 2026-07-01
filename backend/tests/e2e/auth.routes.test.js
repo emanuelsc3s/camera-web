@@ -170,7 +170,7 @@ test('POST /api/auth/login autentica usuário válido, zera falhas e audita', as
   }
 });
 
-test('POST /api/auth/login retorna erro genérico para usuário inexistente sem alterar banco', async () => {
+test('POST /api/auth/login audita erro genérico para usuário inexistente', async () => {
   const mockDatabase = createMockDatabase(async () => []);
   const server = await createServer(mockDatabase);
 
@@ -182,7 +182,18 @@ test('POST /api/auth/login retorna erro genérico para usuário inexistente sem 
 
     assert.equal(result.status, 401);
     assert.equal(result.body.code, 'CREDENCIAIS_INVALIDAS');
-    assert.equal(mockDatabase.calls.length, 1);
+    assert.equal(result.body.error, 'Nome ou senha inválidos.');
+
+    const updateUser = mockDatabase.calls.find((call) => /UPDATE TBUSUARIO/.test(call.sql));
+    const insertAudit = mockDatabase.calls.find((call) => /INSERT INTO TBACESSO/.test(call.sql));
+
+    assert.equal(updateUser, undefined);
+    assert.equal(insertAudit.params[0], null);
+    assert.equal(insertAudit.params[1], 'NaoExiste');
+    assert.equal(insertAudit.params[2], 'CAD001');
+    assert.equal(insertAudit.params[5], 'N');
+    assert.equal(insertAudit.params[8], null);
+    assert.match(insertAudit.params[4], /Usuário não identificado/);
   } finally {
     await server.close();
   }
@@ -209,11 +220,16 @@ test('POST /api/auth/login incrementa tentativas quando senha está incorreta', 
     });
 
     const incrementAttempts = mockDatabase.calls.find((call) => /COALESCE\(FAILED_ATTEMPTS, 0\) \+ 1/.test(call.sql));
+    const insertAudit = mockDatabase.calls.find((call) => /INSERT INTO TBACESSO/.test(call.sql));
 
     assert.equal(result.status, 401);
     assert.equal(result.body.code, 'CREDENCIAIS_INVALIDAS');
+    assert.equal(result.body.error, 'Nome ou senha inválidos. Você tem 2 tentativa(s) restante(s).');
     assert.equal(result.body.details.tentativasRestantes, 2);
     assert.equal(incrementAttempts.params[0], 12);
+    assert.equal(insertAudit.params[2], 'CAD001');
+    assert.equal(insertAudit.params[5], 'N');
+    assert.match(insertAudit.params[4], /Nome ou senha inválidos\. Você tem 2 tentativa\(s\) restante\(s\)\./);
   } finally {
     await server.close();
   }
