@@ -36,6 +36,16 @@ function parseList(valor) {
     .filter(Boolean);
 }
 
+function normalizeFirebirdCharset(valor) {
+  const charset = String(valor || 'WIN1252').trim().toUpperCase();
+
+  if (charset === 'UTF-8') {
+    return 'UTF8';
+  }
+
+  return charset || 'WIN1252';
+}
+
 const raw = process.env;
 const rawBackendPort = raw.PORT || raw.BACKEND_PORT;
 
@@ -60,7 +70,7 @@ const env = {
     user: raw.FIREBIRD_USER || 'SYSDBA',
     password: raw.FIREBIRD_PASSWORD || '',
     role: raw.FIREBIRD_ROLE || null,
-    charset: raw.FIREBIRD_CHARSET || 'WIN1252',
+    charset: normalizeFirebirdCharset(raw.FIREBIRD_CHARSET),
     pageSize: parseInteger('FIREBIRD_PAGE_SIZE', raw.FIREBIRD_PAGE_SIZE, 4096, 1024),
     poolMax: parseInteger('FIREBIRD_POOL_MAX', raw.FIREBIRD_POOL_MAX, 5, 1),
     connectTimeoutMs: parseInteger(
