@@ -1,16 +1,20 @@
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 
 const rootDir = path.resolve(__dirname, '..');
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npmExecPath = process.env.npm_execpath;
+const npmCommand = npmExecPath ? process.execPath : 'npm';
+const npmBaseArgs = npmExecPath ? [npmExecPath] : [];
+const useShell = !npmExecPath && process.platform === 'win32';
 const processes = [];
 let shuttingDown = false;
 
 function startProcess(name, args, cwd) {
-  const child = spawn(npmCommand, args, {
+  const child = spawn(npmCommand, [...npmBaseArgs, ...args], {
     cwd,
     env: process.env,
     stdio: 'inherit',
+    shell: useShell,
   });
 
   processes.push({ name, child });
@@ -39,7 +43,11 @@ function shutdown(exitCode = 0) {
   shuttingDown = true;
 
   for (const { child } of processes) {
-    if (!child.killed) {
+    if (process.platform === 'win32' && child.pid) {
+      spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], {
+        stdio: 'ignore',
+      });
+    } else if (!child.killed) {
       child.kill();
     }
   }
