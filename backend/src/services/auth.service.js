@@ -282,6 +282,8 @@ async function login(credentials, context = {}) {
       throw createInvalidCredentialsError();
     }
 
+    await tx.setSessionUser(user.NOME);
+
     if (isUserBlocked(user)) {
       await registerLoginAudit(tx, user, context, {
         local: 'CAD001',
@@ -424,6 +426,8 @@ async function changeExpiredPassword(data, context = {}) {
         code: 'TOKEN_ALTERACAO_INVALIDO',
       });
     }
+
+    await tx.setSessionUser(user.NOME);
 
     if (isUserBlocked(user)) {
       throw createBlockedUserError('Usuário BLOQUEADO. Contacte o Administrador', {

@@ -3,6 +3,18 @@ const Firebird = require('node-firebird');
 const { env, isFirebirdConfigured } = require('./env');
 
 let pool = null;
+const AUDIT_SESSION_NAMESPACE = 'USER_SESSION';
+const AUDIT_SESSION_KEY = 'USUARIOLOGADO';
+const AUDIT_SESSION_DEFAULT_USER = 'CAMERA_WEB';
+const AUDIT_SESSION_MAX_LENGTH = 30;
+const SET_AUDIT_SESSION_SQL = `
+  SELECT RDB$SET_CONTEXT(
+    '${AUDIT_SESSION_NAMESPACE}',
+    '${AUDIT_SESSION_KEY}',
+    CAST(? AS VARCHAR(255))
+  ) AS CONTEXTO
+  FROM RDB$DATABASE
+`;
 
 class FirebirdConfigError extends Error {
   constructor(message) {
@@ -61,6 +73,22 @@ function getConnection() {
       resolve(db);
     });
   });
+}
+
+function normalizeSessionUser(usuarioNome) {
+  const text = usuarioNome === undefined || usuarioNome === null
+    ? ''
+    : String(usuarioNome).trim();
+
+  return (text || AUDIT_SESSION_DEFAULT_USER).slice(0, AUDIT_SESSION_MAX_LENGTH);
+}
+
+async function setSessionUserOn(executor, usuarioNome) {
+  return runQueryOn(executor, SET_AUDIT_SESSION_SQL, [normalizeSessionUser(usuarioNome)]);
+}
+
+async function clearSessionUserOn(executor) {
+  return runQueryOn(executor, SET_AUDIT_SESSION_SQL, [null]);
 }
 
 function detach(db) {
@@ -155,6 +183,13 @@ async function query(sql, params = []) {
   }
 }
 
+function createTransactionExecutor(transacao) {
+  return {
+    query: (sql, params = []) => runQueryOn(transacao, sql, params),
+    setSessionUser: (usuarioNome) => setSessionUserOn(transacao, usuarioNome),
+  };
+}
+
 function beginTransaction(db) {
   return new Promise((resolve, reject) => {
     db.transaction(Firebird.ISOLATION_READ_COMMITTED, (erro, transacao) => {
@@ -180,17 +215,20 @@ function rollbackTransaction(transacao) {
   });
 }
 
-async function withTransaction(callback) {
+async function withTransaction(callback, options = {}) {
   let db;
   let transacao;
 
   try {
     db = await getConnection();
     transacao = await beginTransaction(db);
+    const tx = createTransactionExecutor(transacao);
 
-    const resultado = await callback({
-      query: (sql, params = []) => runQueryOn(transacao, sql, params),
-    });
+    if (options.sessionUser) {
+      await tx.setSessionUser(options.sessionUser);
+    }
+
+    const resultado = await callback(tx);
 
     await commitTransaction(transacao);
     return resultado;
@@ -201,11 +239,19 @@ async function withTransaction(callback) {
 
     throw erro;
   } finally {
+    if (db) {
+      try {
+        await clearSessionUserOn(db);
+      } catch (erro) {
+        console.error('Falha ao limpar contexto de auditoria do Firebird:', erro.message);
+      }
+    }
+
     detach(db);
   }
 }
 
-async function transaction(operacoes) {
+async function transaction(operacoes, options = {}) {
   if (!Array.isArray(operacoes)) {
     throw new TypeError('transaction espera um array de operacoes SQL.');
   }
@@ -218,7 +264,7 @@ async function transaction(operacoes) {
     }
 
     return resultados;
-  });
+  }, options);
 }
 
 function sanitizeError(erro) {
@@ -282,6 +328,7 @@ module.exports = {
   initializePool,
   ping,
   query,
+  setSessionUser: setSessionUserOn,
   transaction,
   withTransaction,
   sanitizeError,

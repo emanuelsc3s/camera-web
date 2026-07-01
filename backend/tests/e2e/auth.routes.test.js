@@ -63,6 +63,9 @@ function createMockDatabase(handler) {
         query(sql, params = []) {
           return runQuery('tx', sql, params);
         },
+        setSessionUser(usuarioNome) {
+          return runQuery('tx', 'SET_SESSION_USER', [usuarioNome]);
+        },
       });
     },
     async ping() {

@@ -146,6 +146,8 @@ async function registerFaceId(data, context) {
       throw conflict('Usuário já possui Face ID cadastrado.');
     }
 
+    await tx.setSessionUser(data.auditUsuarioNome || data.name);
+
     const idRows = await tx.query(
       'SELECT GEN_ID(GEN_TBUSUARIO_FACEID_ID, 1) AS ID FROM RDB$DATABASE',
     );
@@ -280,6 +282,8 @@ async function authenticateFaceId(data, context) {
     }
 
     if (bestMatch?.isMatch && bestMatch.usuarioId && bestMatch.failedAttempts >= MAX_FAILED_ATTEMPTS) {
+      await tx.setSessionUser(bestMatch.name);
+
       await auditService.registerFaceIdEvent({
         tipo: 'FACE_ID_AUTH_FAILED',
         usuarioId: bestMatch.usuarioId,
@@ -305,6 +309,7 @@ async function authenticateFaceId(data, context) {
     }
 
     if (bestMatch?.isMatch) {
+      await tx.setSessionUser(bestMatch.name);
       await resetFailedAttempts(tx, bestMatch.usuarioId);
       await auditService.registerFaceIdEvent({
         tipo: 'FACE_ID_AUTH_SUCCESS',
@@ -339,6 +344,7 @@ async function authenticateFaceId(data, context) {
       };
     }
 
+    await tx.setSessionUser(targetUser?.NOME || data.matricula || 'FACE_ID');
     const failedAttempts = await incrementFailedAttempts(tx, targetUser?.USUARIO_ID);
 
     await auditService.registerFaceIdEvent({
@@ -474,6 +480,8 @@ async function updateFaceId(faceIdId, data, context) {
       throw notFound('Usuário Face ID não encontrado');
     }
 
+    await tx.setSessionUser(data.auditUsuarioNome || existing.NOME);
+
     await tx.query(
       `
         UPDATE TBUSUARIO_FACEID
@@ -527,6 +535,8 @@ async function deleteFaceId(faceIdId, data, context) {
     if (!existing) {
       throw notFound('Usuário Face ID não encontrado');
     }
+
+    await tx.setSessionUser(data.auditUsuarioNome || existing.NOME);
 
     await tx.query(
       `

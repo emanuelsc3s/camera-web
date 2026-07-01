@@ -112,6 +112,8 @@ async function createInspection(payload) {
 
   try {
     return await database.withTransaction(async (tx) => {
+      await tx.setSessionUser(payload.usuario);
+
       const id = await getNextManualInspectionId(tx);
       const photo = await fotosService.saveInspectionPhoto({
         id,
@@ -256,6 +258,8 @@ async function exportInspections() {
 
 async function deleteInspection(id, audit) {
   return database.withTransaction(async (tx) => {
+    await tx.setSessionUser(audit.usuario);
+
     const rows = await tx.query(
       `
         SELECT FIRST 1 INSPECAOMANUAL_ID
@@ -292,6 +296,8 @@ async function deleteManyInspections(ids, audit) {
   }
 
   return database.withTransaction(async (tx) => {
+    await tx.setSessionUser(audit.usuario);
+
     const placeholders = ids.map(() => '?').join(', ');
     const existingRows = await tx.query(
       `
