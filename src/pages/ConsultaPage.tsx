@@ -21,6 +21,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Plus,
   Search,
   X
 } from 'lucide-react'
@@ -89,6 +90,14 @@ export default function ConsultaPage() {
             </Button>
             <h1 className="text-xl font-semibold">Consulta de Inspeções</h1>
           </div>
+          <Button
+            size="sm"
+            onClick={() => navigate('/')}
+            className="gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Nova Inspeção
+          </Button>
         </div>
       </div>
 
