@@ -37,12 +37,13 @@ function parseList(valor) {
 }
 
 const raw = process.env;
+const rawBackendPort = raw.PORT || raw.BACKEND_PORT;
 
 const env = {
   rootDir,
   nodeEnv: raw.NODE_ENV || 'development',
   host: raw.HOST || '127.0.0.1',
-  port: parseInteger('PORT', raw.PORT, 8000, 1),
+  port: parseInteger(raw.PORT ? 'PORT' : 'BACKEND_PORT', rawBackendPort, 8000, 1),
   apiPrefix: raw.API_PREFIX || '/api',
   requestBodyLimit: raw.REQUEST_BODY_LIMIT || '8mb',
   cors: {
