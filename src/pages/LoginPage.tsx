@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Loader2, ScanFace, Shield } from 'lucide-react'
+import { Eye, EyeOff, Loader2, ScanFace, Shield } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -71,6 +71,7 @@ export default function LoginPage() {
     token,
   } = useAuth()
   const [faceIdModalOpen, setFaceIdModalOpen] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState<string | null>(null)
   const isFaceIdSession = Boolean(token?.startsWith('faceid:'))
 
@@ -262,17 +263,34 @@ export default function LoginPage() {
                   <Label htmlFor="password" className="text-sm font-medium">
                     Senha
                   </Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    autoComplete="current-password"
-                    placeholder="Digite sua senha"
-                    aria-invalid={!!loginErrors.password}
-                    aria-describedby={loginErrors.password ? 'password-error' : undefined}
-                    disabled={isLoading}
-                    className="h-11 text-base transition-shadow focus:shadow-md"
-                    {...registerLogin('password')}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      placeholder="Digite sua senha"
+                      aria-invalid={!!loginErrors.password}
+                      aria-describedby={loginErrors.password ? 'password-error' : undefined}
+                      disabled={isLoading}
+                      className="h-11 pr-12 text-base transition-shadow focus:shadow-md"
+                      {...registerLogin('password')}
+                    />
+                    <button
+                      type="button"
+                      aria-label={showPassword ? 'Ocultar senha' : 'Visualizar senha'}
+                      aria-pressed={showPassword}
+                      title={showPassword ? 'Ocultar senha' : 'Visualizar senha'}
+                      className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={isLoading}
+                      onClick={() => setShowPassword((visible) => !visible)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" aria-hidden="true" />
+                      ) : (
+                        <Eye className="h-4 w-4" aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
                   {loginErrors.password && (
                     <p id="password-error" className="text-sm text-destructive flex items-center gap-1">
                       {loginErrors.password.message}
