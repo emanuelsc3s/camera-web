@@ -54,6 +54,7 @@ function formatDateTime(value) {
 
 function formatProductReference(row) {
   return {
+    opId: row.OP_ID ?? null,
     op: normalizeText(row.OP),
     lote: normalizeText(row.LOTE),
     validade: formatValidade(row.VALIDADE),

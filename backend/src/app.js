@@ -28,6 +28,8 @@ app.get('/', (req, res) => {
     status: 'online',
     endpoints: {
       auth: `${env.apiPrefix}/auth`,
+      configuracaoEstacao: `${env.apiPrefix}/configuracao-estacao`,
+      estacao: `${env.apiPrefix}/estacao`,
       health: `${env.apiPrefix}/health`,
       faceId: `${env.apiPrefix}/face-id`,
       inspecoes: `${env.apiPrefix}/inspecoes`,

@@ -10,12 +10,14 @@ export type InspectionItem = 'gtin' | 'datamatrix' | 'lote' | 'validade'
 
 // Dados de referência do produto
 export interface ReferenceData {
+  opId?: number | null
   op: string
   lote: string
   validade: string
   produto: string
   registroAnvisa: string
   gtin: string
+  linhaProducaoId?: number | null
 }
 
 // Estados de conformidade de todos os itens de inspeção
@@ -27,7 +29,7 @@ export interface InspectionStates {
 }
 
 // Status final da inspeção
-export type InspectionStatus = 'APROVADO' | 'REPROVADO'
+export type InspectionStatus = 'APROVADO' | 'REPROVADO' | 'ABERTO'
 
 // Registro completo de inspeção salvo no localStorage
 export interface InspectionRecord {
@@ -51,6 +53,8 @@ export interface InspectionRecord {
 
   // Status final da inspeção (calculado automaticamente)
   statusFinal: InspectionStatus
+
+  linhaProducaoId?: number | null
 
   // Campos adicionais que podem ser adicionados no futuro
   observacoes?: string

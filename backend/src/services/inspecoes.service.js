@@ -233,6 +233,29 @@ async function listInspections({ startRow, endRow, campo, termo }) {
   };
 }
 
+async function getInspectionSummary(linhaProducaoId) {
+  const rows = await database.query(
+    `
+      SELECT
+        COUNT(*) AS TOTAL,
+        SUM(CASE WHEN STATUS = 'Aprovado' THEN 1 ELSE 0 END) AS APROVADOS,
+        SUM(CASE WHEN STATUS = 'Rejeitado' THEN 1 ELSE 0 END) AS REPROVADOS
+      FROM TBINSPECAO_MANUAL
+      WHERE COALESCE(DELETADO, 'N') = 'N'
+        AND LINHAPRODUCAO_ID = ?
+    `,
+    [linhaProducaoId],
+  );
+
+  const row = rows[0] || {};
+
+  return {
+    total: Number(row.TOTAL || 0),
+    aprovados: Number(row.APROVADOS || 0),
+    reprovados: Number(row.REPROVADOS || 0),
+  };
+}
+
 async function getInspectionById(id) {
   const rows = await database.query(
     `
@@ -338,6 +361,7 @@ module.exports = {
   deleteInspection,
   deleteManyInspections,
   exportInspections,
+  getInspectionSummary,
   getInspectionById,
   listInspections,
 };

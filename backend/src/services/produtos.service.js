@@ -42,6 +42,19 @@ async function getProductByGTIN(gtin) {
   return rows[0] || null;
 }
 
+async function getOpAtivaPorLinha(linhaProducaoId) {
+  const sql = `
+    ${BASE_SELECT_REFERENCIA}
+    WHERE COALESCE(o.DELETADO, 'N') = 'N'
+      AND o.LINHAPRODUCAO_ID = ?
+      AND o."START" = 'S'
+    ORDER BY o.OP_ID DESC
+  `;
+
+  const rows = await database.query(sql, [linhaProducaoId]);
+  return rows[0] || null;
+}
+
 async function getAllProducts({ startRow, endRow }) {
   const sql = `
     SELECT
@@ -62,6 +75,7 @@ async function getAllProducts({ startRow, endRow }) {
 
 module.exports = {
   getAllProducts,
+  getOpAtivaPorLinha,
   getProductByGTIN,
   getProductByOP,
 };

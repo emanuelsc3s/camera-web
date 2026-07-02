@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
-import { getAllRecords } from '@/services/storageService'
-import type { InspectionRecord } from '@/types/inspection'
+import { useQuery } from '@tanstack/react-query'
+
+import { getInspectionSummary } from '@/services/apiService'
 
 /**
- * Interface para as estatísticas de inspeção
+ * Estatísticas resumidas das inspeções manuais da linha configurada.
  */
 export interface InspectionStats {
   /** Total geral de inspeções realizadas */
@@ -14,81 +14,25 @@ export interface InspectionStats {
   reprovados: number
 }
 
-/**
- * Hook customizado para calcular estatísticas de inspeção do LocalStorage
- * 
- * Calcula automaticamente:
- * - Total de inspeções realizadas
- * - Total de inspeções aprovadas (statusFinal === 'APROVADO')
- * - Total de inspeções reprovadas (statusFinal === 'REPROVADO')
- * 
- * @returns Objeto com as estatísticas calculadas
- * 
- * @example
- * ```tsx
- * function MyComponent() {
- *   const stats = useInspectionStats()
- *   
- *   return (
- *     <div>
- *       <p>Total: {stats.total}</p>
- *       <p>Aprovados: {stats.aprovados}</p>
- *       <p>Reprovados: {stats.reprovados}</p>
- *     </div>
- *   )
- * }
- * ```
- */
-export function useInspectionStats(): InspectionStats {
-  const [stats, setStats] = useState<InspectionStats>({
-    total: 0,
-    aprovados: 0,
-    reprovados: 0
-  })
-
-  useEffect(() => {
-    // Função para calcular as estatísticas
-    const calculateStats = () => {
-      const records: InspectionRecord[] = getAllRecords()
-
-      const total = records.length
-      const aprovados = records.filter(record => record.statusFinal === 'APROVADO').length
-      const reprovados = records.filter(record => record.statusFinal === 'REPROVADO').length
-
-      setStats({
-        total,
-        aprovados,
-        reprovados
-      })
-    }
-
-    // Calcula as estatísticas inicialmente
-    calculateStats()
-
-    // Listener para detectar mudanças no localStorage de outras abas/janelas
-    const handleStorageChange = (e: StorageEvent) => {
-      // Recalcula apenas se a chave 'inspection_records' foi modificada
-      if (e.key === 'inspection_records' || e.key === null) {
-        calculateStats()
-      }
-    }
-
-    // Listener para detectar mudanças no localStorage da mesma aba (evento customizado)
-    const handleCustomUpdate = () => {
-      calculateStats()
-    }
-
-    // Adiciona listeners
-    window.addEventListener('storage', handleStorageChange)
-    window.addEventListener('inspectionRecordsUpdated', handleCustomUpdate)
-
-    // Cleanup: remove listeners quando o componente for desmontado
-    return () => {
-      window.removeEventListener('storage', handleStorageChange)
-      window.removeEventListener('inspectionRecordsUpdated', handleCustomUpdate)
-    }
-  }, [])
-
-  return stats
+const EMPTY_STATS: InspectionStats = {
+  total: 0,
+  aprovados: 0,
+  reprovados: 0,
 }
 
+/**
+ * Busca as estatísticas de inspeção no backend para a linha informada.
+ */
+export function useInspectionStats(linhaProducaoId?: number | null): InspectionStats {
+  const enabled = Number.isInteger(linhaProducaoId) && Number(linhaProducaoId) > 0
+
+  const { data } = useQuery({
+    queryKey: ['inspecoes', 'resumo', linhaProducaoId],
+    queryFn: () => getInspectionSummary(Number(linhaProducaoId)),
+    enabled,
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+  })
+
+  return data ?? EMPTY_STATS
+}

@@ -1,6 +1,7 @@
 const inspecoesService = require('../services/inspecoes.service');
+const configuracaoEstacaoService = require('../services/configuracao-estacao.service');
 const produtosService = require('../services/produtos.service');
-const { badRequest, notFound } = require('../utils/http-error');
+const { HttpError, badRequest, notFound } = require('../utils/http-error');
 const { formatDateTime, formatValidade, normalizeText } = require('../utils/formatters');
 const { parsePagination } = require('../utils/pagination');
 
@@ -124,32 +125,41 @@ function parseValidade(value) {
 }
 
 async function parseCreatePayload(body) {
-  const referenceData = requireObject(body.referenceData, 'referenceData');
   const inspectionStates = requireObject(body.inspectionStates, 'inspectionStates');
-  const op = requireString(referenceData.op, 'referenceData.op', 10);
-  const produtoReferencia = await produtosService.getProductByOP(op);
+  const opAtivaIdConfirmado = parseId(body.opAtivaIdConfirmado, 'opAtivaIdConfirmado');
+  const linhaProducaoId = await configuracaoEstacaoService.getLinhaProducaoIdOperacional();
+  const produtoReferencia = await produtosService.getOpAtivaPorLinha(linhaProducaoId);
 
   if (!produtoReferencia) {
-    throw badRequest(`OP '${op}' não encontrada em TBOP.`);
+    throw new HttpError(409, 'Não existe OP ativa para a linha de produção configurada.', {
+      code: 'SEM_OP_ATIVA',
+    });
+  }
+
+  if (Number(produtoReferencia.OP_ID) !== opAtivaIdConfirmado) {
+    throw new HttpError(409, 'A OP ativa foi alterada. Recarregue a tela e confira os dados antes de salvar.', {
+      code: 'OP_ATIVA_ALTERADA',
+      details: {
+        opAtivaAtual: produtoReferencia.OP,
+        opAtivaIdAtual: produtoReferencia.OP_ID,
+      },
+    });
   }
 
   return {
     fotoBase64: requireString(body.fotoBase64, 'fotoBase64'),
     referenceData: {
-      op,
+      op: requireString(produtoReferencia.OP, 'opAtiva.op', 10),
       erpProduto: normalizeText(produtoReferencia.ERP_PRODUTO),
-      lote: normalizeText(produtoReferencia.LOTE || referenceData.lote),
-      validade: referenceData.validade || produtoReferencia.VALIDADE,
-      produto: normalizeText(produtoReferencia.PRODUTO || referenceData.produto),
-      registroAnvisa: normalizeText(produtoReferencia.REGISTRO_ANVISA || referenceData.registroAnvisa),
-      gtin: normalizeText(produtoReferencia.GTIN || referenceData.gtin),
+      lote: normalizeText(produtoReferencia.LOTE),
+      validade: produtoReferencia.VALIDADE,
+      produto: normalizeText(produtoReferencia.PRODUTO),
+      registroAnvisa: normalizeText(produtoReferencia.REGISTRO_ANVISA),
+      gtin: normalizeText(produtoReferencia.GTIN),
     },
-    validadeDate: parseValidade(produtoReferencia.VALIDADE || referenceData.validade),
+    validadeDate: parseValidade(produtoReferencia.VALIDADE),
     opId: produtoReferencia.OP_ID,
-    linhaProducaoId: produtoReferencia.LINHAPRODUCAO_ID ?? parseOptionalInteger(
-      body.linhaProducaoId || referenceData.linhaProducaoId,
-      'linhaProducaoId',
-    ),
+    linhaProducaoId,
     fase: optionalString(body.fase, 'fase', 10),
     conformidades: {
       gtin: parseConformity(inspectionStates.gtin, 'inspectionStates.gtin'),
@@ -277,6 +287,20 @@ async function list(req, res, next) {
   }
 }
 
+async function summary(req, res, next) {
+  try {
+    const linhaProducaoId = parseOptionalInteger(req.query.linhaProducaoId, 'linhaProducaoId');
+
+    if (!linhaProducaoId) {
+      throw badRequest("Parâmetro 'linhaProducaoId' é obrigatório.");
+    }
+
+    res.json(await inspecoesService.getInspectionSummary(linhaProducaoId));
+  } catch (erro) {
+    next(erro);
+  }
+}
+
 async function getById(req, res, next) {
   try {
     const id = parseId(req.params.id);
@@ -356,4 +380,5 @@ module.exports = {
   list,
   remove,
   removeBatch,
+  summary,
 };

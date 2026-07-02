@@ -19,6 +19,19 @@ const REQUIRED_COLUMNS = {
     'DELETADO',
     'FAILED_ATTEMPTS',
   ],
+  TBOP: [
+    'OP_ID',
+    'OP',
+    'LOTE',
+    'PRODUTO',
+    'GTIN',
+    'ANVISA',
+    'LINHAPRODUCAO_ID',
+    'START',
+  ],
+  TBLINHA_PRODUCAO: [
+    'LINHAPRODUCAO_ID',
+  ],
   TBACESSO: [
     'ACESSO_ID',
     'DATA',
@@ -120,6 +133,8 @@ async function loadColumns() {
       TRIM(RDB$FIELD_NAME) AS CAMPO
     FROM RDB$RELATION_FIELDS
     WHERE RDB$RELATION_NAME IN (
+      'TBOP',
+      'TBLINHA_PRODUCAO',
       'TBUSUARIO',
       'TBACESSO',
       'TBINSPECAO_MANUAL',
