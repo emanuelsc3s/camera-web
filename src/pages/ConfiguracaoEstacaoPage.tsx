@@ -9,7 +9,6 @@ import {
   ChevronRight,
   CheckCircle2,
   Loader2,
-  RefreshCw,
   Save,
   Search,
   SearchCheck,
@@ -158,7 +157,6 @@ function OpAtivaResumo({ opAtiva }: { opAtiva: ReferenceDataComOpId | null }) {
       </div>
       <DataItem label="GTIN" value={opAtiva.gtin} />
       <DataItem label="Registro ANVISA" value={opAtiva.registroAnvisa} />
-      <DataItem label="OP ID" value={String(opAtiva.opId)} />
     </div>
   )
 }
@@ -504,6 +502,7 @@ export default function ConfiguracaoEstacaoPage() {
   const [isLinhasOpen, setIsLinhasOpen] = useState(false)
   const [isOpsOpen, setIsOpsOpen] = useState(false)
   const [isTestResultOpen, setIsTestResultOpen] = useState(false)
+  const [testResultLinha, setTestResultLinha] = useState('')
   const [testResult, setTestResult] = useState<ReferenceDataComOpId | null | undefined>(undefined)
   const [firebirdForm, setFirebirdForm] = useState<FirebirdFormState>(EMPTY_FIREBIRD_FORM)
 
@@ -519,6 +518,7 @@ export default function ConfiguracaoEstacaoPage() {
     setLinhaInput(configuracaoQuery.data.linhaProducaoId?.toString() || '')
     setEstacaoNome(configuracaoQuery.data.estacaoNome || '')
     setFirebirdForm(firebirdToForm(configuracaoQuery.data.firebird))
+    setTestResultLinha('')
     setTestResult(undefined)
     setIsTestResultOpen(false)
   }, [configuracaoQuery.data])
@@ -526,6 +526,7 @@ export default function ConfiguracaoEstacaoPage() {
   const testMutation = useMutation({
     mutationFn: async () => testarOpAtiva(parseLinhaInput(linhaInput)),
     onSuccess: (data) => {
+      setTestResultLinha(data.linhaProducao)
       setTestResult(data.opAtiva)
       setIsTestResultOpen(true)
       if (data.opAtiva) {
@@ -536,6 +537,7 @@ export default function ConfiguracaoEstacaoPage() {
       toast.warning('Linha válida, mas sem OP iniciada.')
     },
     onError: (error) => {
+      setTestResultLinha('')
       setTestResult(undefined)
       setIsTestResultOpen(false)
       toast.error(formatApiError(error))
@@ -547,11 +549,13 @@ export default function ConfiguracaoEstacaoPage() {
       linhaProducaoId: parseLinhaInput(linhaInput),
       estacaoNome: estacaoNome.trim(),
     }),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.setQueryData(['configuracao-estacao'], data)
+      await configuracaoQuery.refetch()
       void queryClient.invalidateQueries({ queryKey: ['estacao', 'contexto'] })
       void queryClient.invalidateQueries({ queryKey: ['inspecoes', 'resumo'] })
       setIsConfirmOpen(false)
+      setTestResultLinha('')
       setTestResult(undefined)
       setIsTestResultOpen(false)
       toast.success('Configuração da estação salva com sucesso.')
@@ -634,6 +638,7 @@ export default function ConfiguracaoEstacaoPage() {
   const handleSelectLinha = (linha: LinhaProducao) => {
     setLinhaInput(String(linha.linhaProducaoId))
     setEstacaoNome(linha.linhaProducao)
+    setTestResultLinha('')
     setTestResult(undefined)
     setIsTestResultOpen(false)
     setIsLinhasOpen(false)
@@ -647,6 +652,7 @@ export default function ConfiguracaoEstacaoPage() {
 
     setLinhaInput(String(op.linhaProducaoId))
     setEstacaoNome(op.linhaProducao)
+    setTestResultLinha('')
     setTestResult(undefined)
     setIsTestResultOpen(false)
     setIsOpsOpen(false)
@@ -713,6 +719,7 @@ export default function ConfiguracaoEstacaoPage() {
                         value={linhaInput}
                         onChange={(event) => {
                           setLinhaInput(event.target.value)
+                          setTestResultLinha('')
                           setTestResult(undefined)
                           setIsTestResultOpen(false)
                         }}
@@ -904,15 +911,6 @@ export default function ConfiguracaoEstacaoPage() {
                 <Save className="w-4 h-4" />
                 Salvar
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => configuracaoQuery.refetch()}
-                disabled={configuracaoQuery.isFetching}
-                className="gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Atualizar
-              </Button>
             </div>
           </div>
         </div>
@@ -967,7 +965,7 @@ export default function ConfiguracaoEstacaoPage() {
               Teste da linha informada
             </DialogTitle>
             <DialogDescription>
-              Resultado da consulta de OP ativa para a linha {linhaInput.trim() || '-'}.
+              Resultado da consulta de OP ativa para a linha {testResultLinha || '-'}.
             </DialogDescription>
           </DialogHeader>
 

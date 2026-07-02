@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -34,7 +34,25 @@ import {
   ApiError,
   createInspection,
   getContextoEstacao,
+  type ReferenceDataComOpId,
 } from '@/services/apiService'
+
+function criarAssinaturaOpAtiva(opAtiva: ReferenceDataComOpId | null): string {
+  if (!opAtiva) {
+    return 'sem-op'
+  }
+
+  return [
+    opAtiva.opId ?? '',
+    opAtiva.op ?? '',
+    opAtiva.lote ?? '',
+    opAtiva.validade ?? '',
+    opAtiva.produto ?? '',
+    opAtiva.registroAnvisa ?? '',
+    opAtiva.gtin ?? '',
+    opAtiva.linhaProducaoId ?? '',
+  ].join('|')
+}
 
 export default function HomePage() {
   const navigate = useNavigate()
@@ -44,9 +62,15 @@ export default function HomePage() {
     queryKey: ['estacao', 'contexto'],
     queryFn: getContextoEstacao,
     retry: false,
-    refetchInterval: 30 * 1000,
+    refetchInterval: 5000,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   })
   const opAtiva = contextoQuery.data?.opAtiva ?? null
+  const assinaturaOpAtiva = useMemo(() => criarAssinaturaOpAtiva(opAtiva), [opAtiva])
+  const assinaturaOpAnteriorRef = useRef<string | null>(null)
   const stats = useInspectionStats(contextoQuery.data?.linhaProducaoId)
   const isAdministrador = String(user?.perfil || '').trim().toUpperCase() === 'ADMINISTRADOR'
   const createInspectionMutation = useMutation({
@@ -69,6 +93,32 @@ export default function HomePage() {
     lote: null,
     validade: null
   })
+
+  const temInspecaoEmAndamento = Boolean(lastPhoto) ||
+    Object.values(inspectionStates).some((state) => state !== null)
+
+  useEffect(() => {
+    if (!contextoQuery.isSuccess) {
+      return
+    }
+
+    const assinaturaAnterior = assinaturaOpAnteriorRef.current
+    assinaturaOpAnteriorRef.current = assinaturaOpAtiva
+
+    if (!assinaturaAnterior || assinaturaAnterior === assinaturaOpAtiva) {
+      return
+    }
+
+    setIsModalOpen(false)
+    setIsBarcodeModalOpen(false)
+    setIsConfirmModalOpen(false)
+    setCurrentBarcodeType(null)
+
+    if (temInspecaoEmAndamento) {
+      clearInspectionForm()
+      toast.warning('A OP ativa foi alterada. A inspeção em andamento foi limpa para reiniciar com a OP atual.')
+    }
+  }, [assinaturaOpAtiva, contextoQuery.isSuccess, temInspecaoEmAndamento])
 
   const handlePhotoConfirmed = (photoDataUrl: string) => {
     setLastPhoto(photoDataUrl)

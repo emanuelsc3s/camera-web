@@ -213,10 +213,12 @@ export async function getLinhasProducao(params: {
 
 export async function testarOpAtiva(linhaProducaoId: number): Promise<{
   linhaProducaoId: number
+  linhaProducao: string
   opAtiva: ReferenceDataComOpId | null
 }> {
   return apiRequest<{
     linhaProducaoId: number
+    linhaProducao: string
     opAtiva: ReferenceDataComOpId | null
   }>(`/configuracao-estacao/teste-op-ativa?linhaProducaoId=${linhaProducaoId}`, {
     auth: true,

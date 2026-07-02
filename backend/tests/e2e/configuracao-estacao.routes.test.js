@@ -366,6 +366,55 @@ test('GET /api/configuracao-estacao/linhas-producao usa fallback quando descriç
   });
 });
 
+test('GET /api/configuracao-estacao/teste-op-ativa retorna descrição da linha consultada', async () => {
+  await withTempServer(async ({ server, mockDatabase }) => {
+    const result = await requestJson(
+      server.baseUrl,
+      'GET',
+      '/api/configuracao-estacao/teste-op-ativa?linhaProducaoId=8',
+    );
+
+    const linhaQuery = mockDatabase.calls.find((call) => /FROM TBLINHA_PRODUCAO/.test(call.sql));
+    const opQuery = mockDatabase.calls.find((call) => /FROM TBOP o/.test(call.sql));
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.linhaProducaoId, 8);
+    assert.equal(result.body.linhaProducao, 'LINHA_08_ENVASE');
+    assert.equal(result.body.opAtiva.opId, 999);
+    assert.match(opQuery.sql, /JOIN TBINSPECAO_LAST l/);
+    assert.match(opQuery.sql, /ON l\.OP = o\.OP/);
+    assert.match(opQuery.sql, /l\.LINHAPRODUCAO_ID = \?/);
+    assert.match(opQuery.sql, /l\.CAMERA = 'CAM0'/);
+    assert.match(opQuery.sql, /l\.FASE = 'Fase 0'/);
+    assert.match(opQuery.sql, /ORDER BY l\.LAST_ID DESC/);
+    assert.deepEqual(opQuery.params, [8]);
+    assert.deepEqual(linhaQuery.params, [8]);
+  }, {
+    databaseHandler: async ({ sql }) => {
+      if (/FROM TBUSUARIO/.test(sql)) {
+        return [{
+          USUARIO_ID: 12,
+          NOME: 'Administrador',
+          PERFIL: 'Administrador',
+        }];
+      }
+
+      if (/FROM TBLINHA_PRODUCAO/.test(sql)) {
+        return [{
+          LINHAPRODUCAO_ID: 8,
+          LINHAPRODUCAO: 'LINHA_08_ENVASE',
+        }];
+      }
+
+      if (/FROM TBOP o/.test(sql)) {
+        return [createOpAtiva({ LINHAPRODUCAO_ID: 8 })];
+      }
+
+      return [];
+    },
+  });
+});
+
 test('GET /api/configuracao-estacao/ops-cadastradas exige token válido', async () => {
   await withTempServer(async ({ server }) => {
     const result = await requestJson(

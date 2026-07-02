@@ -387,7 +387,9 @@ async function writeFirebirdEnv(values) {
 async function validarLinhaProducao(linhaProducaoId) {
   const rows = await database.query(
     `
-      SELECT FIRST 1 LINHAPRODUCAO_ID
+      SELECT FIRST 1
+        LINHAPRODUCAO_ID,
+        LINHAPRODUCAO
       FROM TBLINHA_PRODUCAO
       WHERE LINHAPRODUCAO_ID = ?
     `,
@@ -540,10 +542,11 @@ async function getConfiguracaoAdministrativaSemConsultaBanco() {
 
 async function testarOpAtiva(linhaProducaoId) {
   const linha = parseRequiredLinha(linhaProducaoId);
-  await validarLinhaProducao(linha);
+  const linhaProducao = formatLinhaProducao(await validarLinhaProducao(linha));
 
   return {
-    linhaProducaoId: linha,
+    linhaProducaoId: linhaProducao.linhaProducaoId,
+    linhaProducao: linhaProducao.linhaProducao,
     opAtiva: await getOpAtivaFormatada(linha),
   };
 }
