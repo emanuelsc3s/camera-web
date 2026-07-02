@@ -260,6 +260,33 @@ export default function HomePage() {
     { key: 'validade', label: 'Impressão da Validade' }
   ]
 
+  const getInspectionCardStyles = (state: ConformityState) => {
+    if (state === true) {
+      return {
+        button: 'border-emerald-300 bg-emerald-50 text-emerald-950 shadow-sm hover:border-emerald-400 hover:bg-emerald-100',
+        marker: 'bg-emerald-500',
+        icon: 'text-emerald-600',
+        status: 'bg-emerald-600 text-white ring-emerald-600',
+      }
+    }
+
+    if (state === false) {
+      return {
+        button: 'border-rose-300 bg-rose-50 text-rose-950 shadow-sm hover:border-rose-400 hover:bg-rose-100',
+        marker: 'bg-rose-500',
+        icon: 'text-rose-600',
+        status: 'bg-rose-600 text-white ring-rose-600',
+      }
+    }
+
+    return {
+      button: 'border-slate-200 bg-white text-slate-950 hover:border-primary/40 hover:bg-slate-50',
+      marker: 'bg-slate-200',
+      icon: 'text-slate-400',
+      status: 'bg-slate-100 text-slate-600 ring-slate-200',
+    }
+  }
+
   const contextoErrorMessage = contextoQuery.error instanceof ApiError
     ? contextoQuery.error.message
     : contextoQuery.error instanceof Error
@@ -401,47 +428,54 @@ export default function HomePage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-2.5 md:gap-3">
                   {inspectionItems.map(({ key, label }) => {
                     const state = inspectionStates[key]
+                    const styles = getInspectionCardStyles(state)
+                    const statusLabel = state === true ? 'Aprovado' : state === false ? 'Reprovado' : 'Pendente'
                     return (
                       <button
                         key={key}
+                        type="button"
                         onClick={() => toggleInspectionState(key)}
                         disabled={!opAtiva}
                         className={`
-                          relative flex items-start gap-2 sm:gap-2.5 md:gap-3 p-2 sm:p-2.5 md:p-3 rounded-md border-2 transition-all min-h-[80px] sm:min-h-[85px] md:min-h-[90px]
+                          group relative flex min-h-[84px] sm:min-h-[88px] md:min-h-[90px] overflow-hidden rounded-md border
+                          px-2.5 py-2.5 text-left transition-all duration-150 ease-out
+                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2
                           disabled:cursor-not-allowed disabled:opacity-60
-                          ${state === true ? 'border-green-500 bg-green-50 dark:bg-green-950' : ''}
-                          ${state === false ? 'border-red-500 bg-red-50 dark:bg-red-950' : ''}
-                          ${state === null ? 'border-border hover:border-primary/50' : ''}
+                          ${styles.button}
                         `}
                       >
-                        {/* Ícone à esquerda */}
-                        <div className="flex-none">
-                          {state === true && (
-                            <CheckCircle2 className="w-5 h-5 sm:w-5 sm:h-5 md:w-6 md:h-6 text-green-600 dark:text-green-400" />
-                          )}
-                          {state === false && (
-                            <XCircle className="w-5 h-5 sm:w-5 sm:h-5 md:w-6 md:h-6 text-red-600 dark:text-red-400" />
-                          )}
-                          {state === null && (
-                            <div className="w-5 h-5 sm:w-5 sm:h-5 md:w-6 md:h-6 rounded-full border-2 border-muted-foreground/30" />
-                          )}
-                        </div>
+                        <span className={`absolute inset-y-0 left-0 w-1 ${styles.marker}`} aria-hidden="true" />
+                        <span className={`absolute inset-y-0 right-0 w-1 ${styles.marker}`} aria-hidden="true" />
 
-                        {/* Conteúdo à direita */}
-                        <div className="flex-1 flex flex-col justify-center gap-1 sm:gap-1 md:gap-1.5 min-w-0">
-                          {/* Nome do item - alinhado à esquerda */}
-                          <div className="text-sm sm:text-sm md:text-base font-medium text-left leading-tight">
-                            {label}
+                        <div className="flex h-full w-full items-start gap-2.5 pl-1.5 pr-1.5 sm:gap-3 md:px-2">
+                          <div className="mt-0.5 flex-none">
+                            {state === true && (
+                              <CheckCircle2 className={`w-5 h-5 md:w-6 md:h-6 ${styles.icon}`} />
+                            )}
+                            {state === false && (
+                              <XCircle className={`w-5 h-5 md:w-6 md:h-6 ${styles.icon}`} />
+                            )}
+                            {state === null && (
+                              <div className={`w-5 h-5 md:w-6 md:h-6 rounded-full border-2 border-current ${styles.icon}`} />
+                            )}
                           </div>
 
-                          {/* Status APROVADO/REPROVADO - centralizado e BEM MAIOR */}
-                          <div className={`
-                            text-sm sm:text-base md:text-lg font-extrabold uppercase tracking-wide leading-none text-center
-                            ${state === true ? 'text-green-700 dark:text-green-300' : ''}
-                            ${state === false ? 'text-red-700 dark:text-red-300' : ''}
-                            ${state === null ? 'invisible' : ''}
-                          `}>
-                            {state === true ? 'APROVADO' : state === false ? 'REPROVADO' : 'PLACEHOLDER'}
+                          <div className="flex min-w-0 flex-1 flex-col justify-between gap-2 self-stretch">
+                            <div className="min-w-0 pr-1">
+                              <div className="text-sm font-semibold leading-tight md:text-base">
+                                {label}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-center">
+                              <span className={`
+                                inline-flex min-h-[26px] w-full items-center justify-center rounded-full px-2.5 py-1
+                                text-xs font-bold uppercase leading-none ring-1 sm:w-auto sm:min-w-[96px]
+                                ${styles.status}
+                              `}>
+                                {statusLabel}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </button>
