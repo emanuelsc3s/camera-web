@@ -659,7 +659,7 @@ export default function ConfiguracaoEstacaoPage() {
     : null
 
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div className="relative h-full flex flex-col bg-background">
       <div className="flex-none border-b bg-card px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -679,7 +679,7 @@ export default function ConfiguracaoEstacaoPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-4 pb-44 sm:pb-24">
         <div className="mx-auto max-w-5xl space-y-4">
           {isLoading && (
             <div className="rounded-md border bg-card px-4 py-6 text-sm text-muted-foreground">
@@ -878,38 +878,45 @@ export default function ConfiguracaoEstacaoPage() {
                 </div>
               </section>
 
-              <div className="flex flex-col sm:flex-row justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => testMutation.mutate()}
-                  disabled={testMutation.isPending}
-                  className="gap-2"
-                >
-                  <SearchCheck className="w-4 h-4" />
-                  {testMutation.isPending ? 'Testando...' : 'Testar OP ativa'}
-                </Button>
-                <Button
-                  onClick={handleOpenConfirm}
-                  disabled={saveMutation.isPending}
-                  className="gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  Salvar
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => configuracaoQuery.refetch()}
-                  disabled={configuracaoQuery.isFetching}
-                  className="gap-2"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Atualizar
-                </Button>
-              </div>
             </>
           )}
         </div>
       </div>
+
+      {!isLoading && !errorMessage && (
+        <div className="absolute inset-x-0 bottom-0 z-20 border-t bg-background/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="mx-auto max-w-5xl">
+            <div className="flex flex-col sm:flex-row justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => testMutation.mutate()}
+                disabled={testMutation.isPending}
+                className="gap-2"
+              >
+                <SearchCheck className="w-4 h-4" />
+                {testMutation.isPending ? 'Testando...' : 'Testar'}
+              </Button>
+              <Button
+                onClick={handleOpenConfirm}
+                disabled={saveMutation.isPending}
+                className="gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Salvar
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => configuracaoQuery.refetch()}
+                disabled={configuracaoQuery.isFetching}
+                className="gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Atualizar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
         <DialogContent className="sm:max-w-[520px]">
@@ -956,8 +963,7 @@ export default function ConfiguracaoEstacaoPage() {
       <Dialog open={isTestResultOpen} onOpenChange={setIsTestResultOpen}>
         <DialogContent className="sm:max-w-[720px]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <SearchCheck className="w-5 h-5 text-primary" />
+            <DialogTitle>
               Teste da linha informada
             </DialogTitle>
             <DialogDescription>
