@@ -8,13 +8,11 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
-  Database,
   Loader2,
   RefreshCw,
   Save,
   Search,
   SearchCheck,
-  Settings,
   XCircle,
 } from 'lucide-react'
 
@@ -674,8 +672,7 @@ export default function ConfiguracaoEstacaoPage() {
               <ArrowLeft className="w-4 h-4" />
               Voltar
             </Button>
-            <div className="flex items-center gap-2 min-w-0">
-              <Settings className="w-5 h-5 text-primary" />
+            <div className="min-w-0">
               <h1 className="text-lg sm:text-xl font-semibold truncate">Configuração da Estação</h1>
             </div>
           </div>
@@ -747,10 +744,7 @@ export default function ConfiguracaoEstacaoPage() {
 
               <section className="rounded-lg border bg-card shadow-sm">
                 <div className="border-b bg-muted/50 px-4 py-3">
-                  <h2 className="flex items-center gap-2 text-base font-semibold">
-                    <Database className="w-4 h-4 text-primary" />
-                    Conexão com banco de dados
-                  </h2>
+                  <h2 className="text-base font-semibold">Conexão com banco de dados</h2>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
                   <div className="space-y-2">
