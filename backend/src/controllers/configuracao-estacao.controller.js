@@ -1,4 +1,5 @@
 const configuracaoEstacaoService = require('../services/configuracao-estacao.service');
+const { parsePagination } = require('../utils/pagination');
 
 function getRequestContext(req) {
   const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
@@ -45,8 +46,23 @@ async function testOpAtiva(req, res, next) {
   }
 }
 
+async function listOpsCadastradas(req, res, next) {
+  try {
+    const pagination = parsePagination(req.query, {
+      defaultPage: 1,
+      defaultLimit: 10,
+      maxLimit: 50,
+    });
+
+    res.json(await configuracaoEstacaoService.listarOpsCadastradas(pagination));
+  } catch (erro) {
+    next(erro);
+  }
+}
+
 module.exports = {
   get,
+  listOpsCadastradas,
   testOpAtiva,
   update,
 };

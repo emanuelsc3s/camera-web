@@ -196,6 +196,133 @@ test('GET /api/configuracao-estacao bloqueia usuário sem perfil Administrador',
   }, { perfil: 'Operador' });
 });
 
+test('GET /api/configuracao-estacao/ops-cadastradas exige token válido', async () => {
+  await withTempServer(async ({ server }) => {
+    const result = await requestJson(
+      server.baseUrl,
+      'GET',
+      '/api/configuracao-estacao/ops-cadastradas',
+      undefined,
+      null,
+    );
+
+    assert.equal(result.status, 401);
+    assert.equal(result.body.code, 'NAO_AUTENTICADO');
+  });
+});
+
+test('GET /api/configuracao-estacao/ops-cadastradas lista OPs paginadas da TBOP', async () => {
+  await withTempServer(async ({ server, mockDatabase }) => {
+    const result = await requestJson(
+      server.baseUrl,
+      'GET',
+      '/api/configuracao-estacao/ops-cadastradas?page=2&limit=2',
+    );
+
+    const countQuery = mockDatabase.calls.find((call) => /SELECT\s+COUNT\(\*\) AS TOTAL\s+FROM/.test(call.sql));
+    const listQuery = mockDatabase.calls.find((call) => /SELECT\s+OP_ID,\s+OP,\s+STATUS/.test(call.sql));
+
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.body.pagination, {
+      page: 2,
+      limit: 2,
+      total: 3,
+      totalPages: 2,
+    });
+    assert.deepEqual(result.body.data, [{
+      opId: 1001,
+      op: '146900',
+      status: 'Aberto',
+      linhaProducaoId: 8,
+      linhaProducao: 'LINHA_08_ENVASE',
+      produto: 'PRODUTO TESTE',
+      lote: 'L001',
+      validade: '10/2027',
+    }]);
+    assert.match(countQuery.sql, /FROM TBOP/);
+    assert.doesNotMatch(listQuery.sql, /GROUP BY/);
+    assert.match(listQuery.sql, /COALESCE\(DELETADO, 'N'\) = 'N'/);
+    assert.match(listQuery.sql, /ORDER BY OP_ID DESC/);
+    assert.match(listQuery.sql, /ROWS \? TO \?/);
+    assert.deepEqual(listQuery.params, [3, 4]);
+  }, {
+    databaseHandler: async ({ sql }) => {
+      if (/FROM TBUSUARIO/.test(sql)) {
+        return [{
+          USUARIO_ID: 12,
+          NOME: 'Administrador',
+          PERFIL: 'Administrador',
+        }];
+      }
+
+      if (/SELECT\s+COUNT\(\*\) AS TOTAL\s+FROM/.test(sql)) {
+        return [{ TOTAL: 3 }];
+      }
+
+      if (/SELECT\s+OP_ID,\s+OP,\s+STATUS/.test(sql)) {
+        return [{
+          OP_ID: 1001,
+          OP: '146900',
+          STATUS: 'Aberto',
+          LINHAPRODUCAO_ID: 8,
+          LINHAPRODUCAO: 'LINHA_08_ENVASE',
+          PRODUTO: 'PRODUTO TESTE',
+          LOTE: 'L001',
+          VALIDADE: new Date('2027-10-01T00:00:00'),
+        }];
+      }
+
+      return [];
+    },
+  });
+});
+
+test('GET /api/configuracao-estacao/ops-cadastradas usa fallback quando linha da TBOP está vazia', async () => {
+  await withTempServer(async ({ server }) => {
+    const result = await requestJson(
+      server.baseUrl,
+      'GET',
+      '/api/configuracao-estacao/ops-cadastradas',
+    );
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.data[0].opId, 990);
+    assert.equal(result.body.data[0].op, '146800');
+    assert.equal(result.body.data[0].linhaProducaoId, 7);
+    assert.equal(result.body.data[0].linhaProducao, 'LINHA_7');
+    assert.equal(result.body.pagination.totalPages, 1);
+  }, {
+    databaseHandler: async ({ sql }) => {
+      if (/FROM TBUSUARIO/.test(sql)) {
+        return [{
+          USUARIO_ID: 12,
+          NOME: 'Administrador',
+          PERFIL: 'Administrador',
+        }];
+      }
+
+      if (/SELECT\s+COUNT\(\*\) AS TOTAL\s+FROM/.test(sql)) {
+        return [{ TOTAL: 1 }];
+      }
+
+      if (/SELECT\s+OP_ID,\s+OP,\s+STATUS/.test(sql)) {
+        return [{
+          OP_ID: 990,
+          OP: '146800',
+          STATUS: 'Aberto',
+          LINHAPRODUCAO_ID: 7,
+          LINHAPRODUCAO: '   ',
+          PRODUTO: 'PRODUTO SEM LINHA DESCRITA',
+          LOTE: 'L002',
+          VALIDADE: null,
+        }];
+      }
+
+      return [];
+    },
+  });
+});
+
 test('PUT /api/configuracao-estacao grava somente chaves permitidas e audita alteração', async () => {
   await withTempServer(async ({ server, mockDatabase, envFilePath }) => {
     const result = await requestJson(server.baseUrl, 'PUT', '/api/configuracao-estacao', {

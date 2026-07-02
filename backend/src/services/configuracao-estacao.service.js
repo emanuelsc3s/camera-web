@@ -6,12 +6,13 @@ const auditService = require('./audit.service');
 const produtosService = require('./produtos.service');
 const database = require('../config/database');
 const { env } = require('../config/env');
-const { formatProductReference, normalizeText } = require('../utils/formatters');
+const { formatProductReference, formatValidade, normalizeText } = require('../utils/formatters');
 const { HttpError, notFound } = require('../utils/http-error');
 
 const LINHA_KEY = 'CAMERA_WEB_LINHA_PRODUCAO_ID';
 const ESTACAO_KEY = 'CAMERA_WEB_ESTACAO_NOME';
 const ESTACAO_MAX_LENGTH = 80;
+const DEFAULT_OP_PAGE_TOTAL = 0;
 
 let writeQueue = Promise.resolve();
 
@@ -208,6 +209,63 @@ async function validarLinhaProducao(linhaProducaoId) {
   return rows[0];
 }
 
+function formatOpCadastrada(row) {
+  const linhaProducaoId = row.LINHAPRODUCAO_ID;
+  const linhaProducao = normalizeText(row.LINHAPRODUCAO) ||
+    (linhaProducaoId ? `LINHA_${linhaProducaoId}` : '');
+
+  return {
+    opId: row.OP_ID ?? null,
+    op: normalizeText(row.OP),
+    status: normalizeText(row.STATUS),
+    linhaProducaoId,
+    linhaProducao,
+    produto: normalizeText(row.PRODUTO),
+    lote: normalizeText(row.LOTE),
+    validade: formatValidade(row.VALIDADE),
+  };
+}
+
+async function listarOpsCadastradas({ page, limit, startRow, endRow }) {
+  const countRows = await database.query(`
+    SELECT COUNT(*) AS TOTAL
+    FROM TBOP
+    WHERE COALESCE(DELETADO, 'N') = 'N'
+  `);
+
+  const total = Number(countRows[0]?.TOTAL ?? DEFAULT_OP_PAGE_TOTAL);
+  const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
+
+  const rows = await database.query(
+    `
+      SELECT
+        OP_ID,
+        OP,
+        STATUS,
+        LINHAPRODUCAO_ID,
+        LINHAPRODUCAO,
+        PRODUTO,
+        LOTE,
+        VALIDADE
+      FROM TBOP
+      WHERE COALESCE(DELETADO, 'N') = 'N'
+      ORDER BY OP_ID DESC
+      ROWS ? TO ?
+    `,
+    [startRow, endRow],
+  );
+
+  return {
+    data: rows.map(formatOpCadastrada),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages,
+    },
+  };
+}
+
 async function getOpAtivaFormatada(linhaProducaoId) {
   const row = await produtosService.getOpAtivaPorLinha(linhaProducaoId);
   return row ? formatProductReference(row) : null;
@@ -273,6 +331,7 @@ module.exports = {
   getContextoEstacao,
   getLinhaProducaoIdOperacional,
   getLinhaProducaoIdConfigurada,
+  listarOpsCadastradas,
   requireLinhaProducaoConfigurada,
   salvarConfiguracao,
   testarOpAtiva,

@@ -5,9 +5,13 @@ import { toast } from 'sonner'
 import {
   AlertCircle,
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
+  Loader2,
   RefreshCw,
   Save,
+  Search,
   SearchCheck,
   Settings,
   XCircle,
@@ -25,12 +29,23 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   ApiError,
+  type OpCadastrada,
   type ReferenceDataComOpId,
   getConfiguracaoEstacao,
+  getOpsCadastradas,
   testarOpAtiva,
   updateConfiguracaoEstacao,
 } from '@/services/apiService'
+
+const OPS_PAGE_SIZE_OPTIONS = [10, 25, 50]
 
 function parseLinhaInput(value: string): number {
   const text = value.trim()
@@ -94,12 +109,179 @@ function DataItem({ label, value }: { label: string; value: string }) {
   )
 }
 
+interface OpsCadastradasDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSelect: (op: OpCadastrada) => void
+}
+
+function OpsCadastradasDialog({
+  open,
+  onOpenChange,
+  onSelect,
+}: OpsCadastradasDialogProps) {
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+
+  const opsQuery = useQuery({
+    queryKey: ['configuracao-estacao', 'ops-cadastradas', page, limit],
+    queryFn: () => getOpsCadastradas({ page, limit }),
+    enabled: open,
+    retry: false,
+  })
+
+  const ops = opsQuery.data?.data ?? []
+  const pagination = opsQuery.data?.pagination
+  const totalPages = pagination?.totalPages ?? 0
+  const hasPreviousPage = page > 1
+  const hasNextPage = totalPages > 0 && page < totalPages
+  const pageLabel = totalPages > 0 ? `Página ${page} de ${totalPages}` : 'Página 0 de 0'
+  const totalLabel = pagination?.total === 1
+    ? '1 OP encontrada'
+    : `${pagination?.total ?? 0} OPs encontradas`
+  const errorMessage = opsQuery.error ? formatApiError(opsQuery.error) : null
+
+  const handleLimitChange = (value: string) => {
+    setLimit(Number.parseInt(value, 10))
+    setPage(1)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[860px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Search className="w-5 h-5 text-primary" />
+            Buscar OP cadastrada
+          </DialogTitle>
+          <DialogDescription>
+            Registros cadastrados na tabela TBOP.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">{totalLabel}</span>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="opsPageSize" className="text-sm font-medium">
+                Registros por página
+              </Label>
+              <Select value={String(limit)} onValueChange={handleLimitChange}>
+                <SelectTrigger id="opsPageSize" className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OPS_PAGE_SIZE_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={String(option)}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {errorMessage && (
+            <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+              {errorMessage}
+            </div>
+          )}
+
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full min-w-[920px] text-sm">
+              <thead className="bg-muted/60 text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">OP</th>
+                  <th className="px-3 py-2 text-left font-medium">Status</th>
+                  <th className="px-3 py-2 text-left font-medium">Linha</th>
+                  <th className="px-3 py-2 text-left font-medium">Descrição da linha</th>
+                  <th className="px-3 py-2 text-left font-medium">Produto</th>
+                  <th className="px-3 py-2 text-left font-medium">Lote</th>
+                  <th className="px-3 py-2 text-right font-medium">Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {opsQuery.isLoading && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Carregando OPs cadastradas...
+                      </span>
+                    </td>
+                  </tr>
+                )}
+
+                {!opsQuery.isLoading && !errorMessage && ops.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                      Nenhuma OP cadastrada encontrada.
+                    </td>
+                  </tr>
+                )}
+
+                {!opsQuery.isLoading && ops.map((op) => (
+                  <tr key={`${op.opId}-${op.op}`} className="border-t">
+                    <td className="px-3 py-2 font-medium">{op.op || '-'}</td>
+                    <td className="px-3 py-2">{op.status || '-'}</td>
+                    <td className="px-3 py-2">{op.linhaProducaoId ?? '-'}</td>
+                    <td className="px-3 py-2">{op.linhaProducao || '-'}</td>
+                    <td className="px-3 py-2">{op.produto || '-'}</td>
+                    <td className="px-3 py-2">{op.lote || '-'}</td>
+                    <td className="px-3 py-2 text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => onSelect(op)}
+                        disabled={!op.linhaProducaoId}
+                      >
+                        Selecionar
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <span className="text-sm text-muted-foreground">{pageLabel}</span>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+                disabled={!hasPreviousPage || opsQuery.isFetching}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Anterior
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((currentPage) => currentPage + 1)}
+                disabled={!hasNextPage || opsQuery.isFetching}
+              >
+                Próxima
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function ConfiguracaoEstacaoPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [linhaInput, setLinhaInput] = useState('')
   const [estacaoNome, setEstacaoNome] = useState('')
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+  const [isOpsOpen, setIsOpsOpen] = useState(false)
   const [testResult, setTestResult] = useState<ReferenceDataComOpId | null | undefined>(undefined)
 
   const configuracaoQuery = useQuery({
@@ -165,6 +347,18 @@ export default function ConfiguracaoEstacaoPage() {
     }
   }
 
+  const handleSelectOp = (op: OpCadastrada) => {
+    if (!op.linhaProducaoId) {
+      toast.error('A OP selecionada não possui linha de produção vinculada.')
+      return
+    }
+
+    setLinhaInput(String(op.linhaProducaoId))
+    setEstacaoNome(op.linhaProducao)
+    setTestResult(undefined)
+    setIsOpsOpen(false)
+  }
+
   const currentData = configuracaoQuery.data
   const isLoading = configuracaoQuery.isLoading
   const errorMessage = configuracaoQuery.error
@@ -220,16 +414,27 @@ export default function ConfiguracaoEstacaoPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
                   <div className="space-y-2">
                     <Label htmlFor="linhaProducaoId">Linha de produção</Label>
-                    <Input
-                      id="linhaProducaoId"
-                      inputMode="numeric"
-                      value={linhaInput}
-                      onChange={(event) => {
-                        setLinhaInput(event.target.value)
-                        setTestResult(undefined)
-                      }}
-                      placeholder="Ex.: 5"
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        id="linhaProducaoId"
+                        inputMode="numeric"
+                        value={linhaInput}
+                        onChange={(event) => {
+                          setLinhaInput(event.target.value)
+                          setTestResult(undefined)
+                        }}
+                        placeholder="Ex.: 5"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setIsOpsOpen(true)}
+                        aria-label="Buscar OPs cadastradas"
+                      >
+                        <Search className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -363,6 +568,12 @@ export default function ConfiguracaoEstacaoPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <OpsCadastradasDialog
+        open={isOpsOpen}
+        onOpenChange={setIsOpsOpen}
+        onSelect={handleSelectOp}
+      />
     </div>
   )
 }

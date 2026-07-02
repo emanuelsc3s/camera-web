@@ -33,6 +33,29 @@ export interface ConfiguracaoEstacao {
   opAtiva: ReferenceDataComOpId | null
 }
 
+export interface OpCadastrada {
+  opId: number | null
+  op: string
+  status: string
+  linhaProducaoId: number | null
+  linhaProducao: string
+  produto: string
+  lote: string
+  validade: string
+}
+
+export interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
+
+export interface PaginatedOpsCadastradas {
+  data: OpCadastrada[]
+  pagination: PaginationInfo
+}
+
 export interface InspectionSummary {
   total: number
   aprovados: number
@@ -112,6 +135,21 @@ export async function updateConfiguracaoEstacao(data: {
     auth: true,
     body: JSON.stringify(data),
   })
+}
+
+export async function getOpsCadastradas(params: {
+  page: number
+  limit: number
+}): Promise<PaginatedOpsCadastradas> {
+  const searchParams = new URLSearchParams({
+    page: String(params.page),
+    limit: String(params.limit),
+  })
+
+  return apiRequest<PaginatedOpsCadastradas>(
+    `/configuracao-estacao/ops-cadastradas?${searchParams.toString()}`,
+    { auth: true }
+  )
 }
 
 export async function testarOpAtiva(linhaProducaoId: number): Promise<{

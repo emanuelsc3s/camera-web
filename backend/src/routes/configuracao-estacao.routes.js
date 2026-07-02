@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.use(requireAdministrador);
 
+router.get('/ops-cadastradas', configuracaoEstacaoController.listOpsCadastradas);
 router.get('/teste-op-ativa', configuracaoEstacaoController.testOpAtiva);
 router.get('/', configuracaoEstacaoController.get);
 router.put('/', configuracaoEstacaoController.update);
