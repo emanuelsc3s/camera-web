@@ -505,6 +505,7 @@ export default function ConfiguracaoEstacaoPage() {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
   const [isLinhasOpen, setIsLinhasOpen] = useState(false)
   const [isOpsOpen, setIsOpsOpen] = useState(false)
+  const [isTestResultOpen, setIsTestResultOpen] = useState(false)
   const [testResult, setTestResult] = useState<ReferenceDataComOpId | null | undefined>(undefined)
   const [firebirdForm, setFirebirdForm] = useState<FirebirdFormState>(EMPTY_FIREBIRD_FORM)
 
@@ -521,12 +522,14 @@ export default function ConfiguracaoEstacaoPage() {
     setEstacaoNome(configuracaoQuery.data.estacaoNome || '')
     setFirebirdForm(firebirdToForm(configuracaoQuery.data.firebird))
     setTestResult(undefined)
+    setIsTestResultOpen(false)
   }, [configuracaoQuery.data])
 
   const testMutation = useMutation({
     mutationFn: async () => testarOpAtiva(parseLinhaInput(linhaInput)),
     onSuccess: (data) => {
       setTestResult(data.opAtiva)
+      setIsTestResultOpen(true)
       if (data.opAtiva) {
         toast.success(`OP ativa encontrada: ${data.opAtiva.op}`)
         return
@@ -536,6 +539,7 @@ export default function ConfiguracaoEstacaoPage() {
     },
     onError: (error) => {
       setTestResult(undefined)
+      setIsTestResultOpen(false)
       toast.error(formatApiError(error))
     },
   })
@@ -551,6 +555,7 @@ export default function ConfiguracaoEstacaoPage() {
       void queryClient.invalidateQueries({ queryKey: ['inspecoes', 'resumo'] })
       setIsConfirmOpen(false)
       setTestResult(undefined)
+      setIsTestResultOpen(false)
       toast.success('Configuração da estação salva com sucesso.')
     },
     onError: (error) => {
@@ -632,6 +637,7 @@ export default function ConfiguracaoEstacaoPage() {
     setLinhaInput(String(linha.linhaProducaoId))
     setEstacaoNome(linha.linhaProducao)
     setTestResult(undefined)
+    setIsTestResultOpen(false)
     setIsLinhasOpen(false)
   }
 
@@ -644,6 +650,7 @@ export default function ConfiguracaoEstacaoPage() {
     setLinhaInput(String(op.linhaProducaoId))
     setEstacaoNome(op.linhaProducao)
     setTestResult(undefined)
+    setIsTestResultOpen(false)
     setIsOpsOpen(false)
   }
 
@@ -710,6 +717,7 @@ export default function ConfiguracaoEstacaoPage() {
                         onChange={(event) => {
                           setLinhaInput(event.target.value)
                           setTestResult(undefined)
+                          setIsTestResultOpen(false)
                         }}
                         placeholder="Ex.: 5"
                       />
@@ -876,17 +884,6 @@ export default function ConfiguracaoEstacaoPage() {
                 </div>
               </section>
 
-              {testResult !== undefined && (
-                <section className="rounded-lg border bg-card shadow-sm">
-                  <div className="border-b bg-muted/50 px-4 py-3">
-                    <h2 className="text-base font-semibold">Teste da linha informada</h2>
-                  </div>
-                  <div className="p-4">
-                    <OpAtivaResumo opAtiva={testResult} />
-                  </div>
-                </section>
-              )}
-
               <div className="flex flex-col sm:flex-row justify-end gap-2">
                 <Button
                   variant="outline"
@@ -957,6 +954,38 @@ export default function ConfiguracaoEstacaoPage() {
             >
               <CheckCircle2 className="w-4 h-4" />
               {saveMutation.isPending ? 'Salvando...' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isTestResultOpen} onOpenChange={setIsTestResultOpen}>
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <SearchCheck className="w-5 h-5 text-primary" />
+              Teste da linha informada
+            </DialogTitle>
+            <DialogDescription>
+              Resultado da consulta de OP ativa para a linha {linhaInput.trim() || '-'}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2">
+            {testResult !== undefined && (
+              <OpAtivaResumo opAtiva={testResult} />
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsTestResultOpen(false)}
+              className="gap-2"
+            >
+              <XCircle className="w-4 h-4" />
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
