@@ -21,6 +21,7 @@ import {
   Search,
   XCircle,
   CheckCircle2,
+  Loader2,
   Camera,
   Save,
   AlertCircle,
@@ -53,6 +54,8 @@ function criarAssinaturaOpAtiva(opAtiva: ReferenceDataComOpId | null): string {
     opAtiva.linhaProducaoId ?? '',
   ].join('|')
 }
+
+const FASE_INSPECAO_MANUAL = 'Fase 1'
 
 export default function HomePage() {
   const navigate = useNavigate()
@@ -228,6 +231,7 @@ export default function HomePage() {
         opAtivaIdConfirmado: opAtiva.opId,
         fotoBase64: lastPhoto!,
         inspectionStates,
+        fase: FASE_INSPECAO_MANUAL,
         usuarioId: user?.usuarioId,
         usuario: user?.name,
       })
@@ -598,30 +602,43 @@ export default function HomePage() {
       />
 
       {/* Modal de confirmação de salvamento */}
-      <Dialog open={isConfirmModalOpen} onOpenChange={setIsConfirmModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-primary" />
-              Confirmar Salvamento
-            </DialogTitle>
-            <DialogDescription className="text-lg pt-2 text-gray-700 dark:text-gray-300">
-              Deseja salvar este registro de inspeção?
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-4">
-            <p className="text-base text-gray-600 dark:text-gray-400">
-              Ao confirmar, todos os dados da inspeção serão salvos e a tela será limpa para uma nova inspeção.
-            </p>
+      <Dialog
+        open={isConfirmModalOpen}
+        onOpenChange={(open) => {
+          if (!createInspectionMutation.isPending) {
+            setIsConfirmModalOpen(open)
+          }
+        }}
+      >
+        <DialogContent className="w-[calc(100vw-2rem)] gap-0 overflow-hidden border-border bg-background p-0 text-foreground shadow-2xl sm:max-w-[480px]">
+          <div className="border-b border-border bg-muted/50 px-6 py-5">
+            <DialogHeader className="space-y-0 text-left">
+              <DialogTitle className="flex items-center gap-3 text-xl font-bold leading-tight text-foreground">
+                <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/20">
+                  <AlertCircle className="h-5 w-5" />
+                </span>
+                <span>Confirmar salvamento</span>
+              </DialogTitle>
+            </DialogHeader>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <div className="space-y-5 px-6 py-5">
+            <DialogDescription className="text-base font-medium leading-6 text-foreground">
+              Deseja salvar este registro de inspeção?
+            </DialogDescription>
+
+            <div className="rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm leading-6 text-foreground/80">
+              Ao confirmar, todos os dados da inspeção serão salvos e a tela será limpa para uma nova inspeção.
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 border-t border-border bg-muted/40 px-6 py-4 sm:gap-3 sm:space-x-0">
             <Button
               type="button"
               variant="outline"
               onClick={handleCancelSave}
-              className="gap-2"
+              disabled={createInspectionMutation.isPending}
+              className="h-11 w-full gap-2 border-border text-foreground hover:bg-muted sm:w-auto"
             >
               <XCircle className="w-4 h-4" />
               Cancelar
@@ -630,10 +647,14 @@ export default function HomePage() {
               type="button"
               onClick={handleConfirmSave}
               disabled={createInspectionMutation.isPending}
-              className="gap-2"
+              className="h-11 w-full gap-2 px-5 font-bold shadow-sm disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              {createInspectionMutation.isPending ? 'Salvando...' : 'Confirmar'}
+              {createInspectionMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4" />
+              )}
+              {createInspectionMutation.isPending ? 'Salvando...' : 'Salvar inspeção'}
             </Button>
           </DialogFooter>
         </DialogContent>

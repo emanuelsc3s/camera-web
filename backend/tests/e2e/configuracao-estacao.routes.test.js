@@ -762,6 +762,7 @@ test('POST /api/inspecoes grava inspeção manual na TBINSPECAO_MANUAL', async (
     assert.equal(insertQuery.params[1], 'Rejeitado');
     assert.equal(insertQuery.params[2], 999);
     assert.equal(insertQuery.params[3], '146728');
+    assert.equal(insertQuery.params[11], 'Fase 1');
     assert.match(insertQuery.params[12], /^\d{4}\/\d{2}\/\d{2}\/123_\d+\.jpg$/);
     assert.deepEqual(insertQuery.params.slice(13, 17), ['Sim', 'Não', 'Sim', 'Sim']);
     assert.equal(insertQuery.params[17], 'Amostra reprovada no datamatrix');

@@ -5,6 +5,8 @@ const { HttpError, badRequest, notFound } = require('../utils/http-error');
 const { formatDateTime, formatValidade, normalizeText } = require('../utils/formatters');
 const { parsePagination } = require('../utils/pagination');
 
+const FASE_INSPECAO_MANUAL = 'Fase 1';
+
 function parseId(value, fieldName = 'id') {
   const text = String(value || '').trim();
 
@@ -160,7 +162,7 @@ async function parseCreatePayload(body) {
     validadeDate: parseValidade(produtoReferencia.VALIDADE),
     opId: produtoReferencia.OP_ID,
     linhaProducaoId,
-    fase: optionalString(body.fase, 'fase', 10),
+    fase: FASE_INSPECAO_MANUAL,
     conformidades: {
       gtin: parseConformity(inspectionStates.gtin, 'inspectionStates.gtin'),
       datamatrix: parseConformity(inspectionStates.datamatrix, 'inspectionStates.datamatrix'),
