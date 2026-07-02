@@ -4,10 +4,31 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const dotenv = require('dotenv');
 const jsonwebtoken = require('jsonwebtoken');
+
+const {
+  decryptSecret,
+  encryptSecret,
+  generateCryptoKey,
+  isEncryptedSecret,
+} = require('../../src/utils/config-crypto');
 
 const backendRoot = path.resolve(__dirname, '..', '..');
 const jwtSecret = 'segredo-de-teste';
+const firebirdEnvKeys = [
+  'FIREBIRD_HOST',
+  'FIREBIRD_PORT',
+  'FIREBIRD_DATABASE',
+  'FIREBIRD_USER',
+  'FIREBIRD_PASSWORD',
+  'FIREBIRD_ROLE',
+  'FIREBIRD_CHARSET',
+  'FIREBIRD_PAGE_SIZE',
+  'FIREBIRD_POOL_MAX',
+  'FIREBIRD_CONNECT_TIMEOUT_MS',
+  'CAMERA_WEB_CONFIG_CRYPTO_KEY',
+];
 
 function clearBackendModules() {
   const srcRoot = path.join(backendRoot, 'src');
@@ -68,6 +89,17 @@ async function createServer(mockDatabase, envFilePath, uploadDir) {
   process.env.CAMERA_WEB_LINHA_PRODUCAO_ID = '';
   process.env.CAMERA_WEB_ESTACAO_NOME = '';
   process.env.UPLOAD_DIR = uploadDir;
+  process.env.FIREBIRD_HOST = '127.0.0.1';
+  process.env.FIREBIRD_PORT = '3050';
+  process.env.FIREBIRD_DATABASE = '';
+  process.env.FIREBIRD_USER = 'SYSDBA';
+  process.env.FIREBIRD_PASSWORD = '';
+  process.env.FIREBIRD_ROLE = '';
+  process.env.FIREBIRD_CHARSET = 'WIN1252';
+  process.env.FIREBIRD_PAGE_SIZE = '4096';
+  process.env.FIREBIRD_POOL_MAX = '5';
+  process.env.FIREBIRD_CONNECT_TIMEOUT_MS = '10000';
+  delete process.env.CAMERA_WEB_CONFIG_CRYPTO_KEY;
 
   const app = require('../../src/app');
   const server = http.createServer(app);
@@ -175,6 +207,9 @@ async function withTempServer(handler, options = {}) {
     delete process.env.CAMERA_WEB_LINHA_PRODUCAO_ID;
     delete process.env.CAMERA_WEB_ESTACAO_NOME;
     delete process.env.UPLOAD_DIR;
+    firebirdEnvKeys.forEach((key) => {
+      delete process.env[key];
+    });
   }
 }
 
@@ -194,6 +229,37 @@ test('GET /api/configuracao-estacao bloqueia usuário sem perfil Administrador',
     assert.equal(result.status, 403);
     assert.equal(result.body.code, 'ACESSO_NEGADO');
   }, { perfil: 'Operador' });
+});
+
+test('GET /api/configuracao-estacao retorna configuração Firebird sem expor senha', async () => {
+  await withTempServer(async ({ server }) => {
+    const result = await requestJson(server.baseUrl, 'GET', '/api/configuracao-estacao');
+    const responseText = JSON.stringify(result.body);
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.firebird.host, '10.0.0.20');
+    assert.equal(result.body.firebird.port, 3051);
+    assert.equal(result.body.firebird.database, 'C:\\dados\\camera.fdb');
+    assert.equal(result.body.firebird.user, 'SYSDBA');
+    assert.equal(result.body.firebird.charset, 'WIN1252');
+    assert.equal(result.body.firebird.passwordConfigured, true);
+    assert.equal(result.body.firebird.passwordEncrypted, false);
+    assert.doesNotMatch(responseText, /masterkey|FIREBIRD_PASSWORD|CAMERA_WEB_CONFIG_CRYPTO_KEY/);
+  }, {
+    envContent: [
+      'CAMERA_WEB_LINHA_PRODUCAO_ID=5',
+      'CAMERA_WEB_ESTACAO_NOME=LINHA_05_MANUAL',
+      'FIREBIRD_HOST=10.0.0.20',
+      'FIREBIRD_PORT=3051',
+      'FIREBIRD_DATABASE=C:\\dados\\camera.fdb',
+      'FIREBIRD_USER=SYSDBA',
+      'FIREBIRD_PASSWORD=masterkey',
+      'FIREBIRD_CHARSET=WIN1252',
+      'FIREBIRD_PAGE_SIZE=4096',
+      'FIREBIRD_POOL_MAX=5',
+      'FIREBIRD_CONNECT_TIMEOUT_MS=10000',
+    ].join('\n'),
+  });
 });
 
 test('GET /api/configuracao-estacao/linhas-producao exige token válido', async () => {
@@ -450,6 +516,99 @@ test('PUT /api/configuracao-estacao grava somente chaves permitidas e audita alt
     assert.equal(insertAudit.params[3], 'CONFIG_UPDATE');
   }, {
     envContent: 'FIREBIRD_PASSWORD=masterkey\nJWT_SECRET=segredo\n',
+  });
+});
+
+test('PUT /api/configuracao-estacao/firebird salva senha criptografada no .env', async () => {
+  await withTempServer(async ({ server, mockDatabase, envFilePath }) => {
+    const result = await requestJson(server.baseUrl, 'PUT', '/api/configuracao-estacao/firebird', {
+      host: '10.0.0.30',
+      port: 3050,
+      database: 'C:\\dados\\novo-camera.fdb',
+      user: 'SYSDBA',
+      password: 'senha-nova-teste',
+      role: '',
+      charset: 'WIN1252',
+      pageSize: 4096,
+      poolMax: 5,
+      connectTimeoutMs: 10000,
+    });
+
+    const envContent = await fs.readFile(envFilePath, 'utf8');
+    const parsedEnv = dotenv.parse(envContent);
+    const audit = mockDatabase.calls.find((call) => (
+      /INSERT INTO TBACESSO/.test(call.sql) &&
+      call.params[3] === 'CONFIG_FIREBIRD_UPDATE'
+    ));
+    const responseText = JSON.stringify(result.body);
+
+    assert.equal(result.status, 200);
+    assert.equal(parsedEnv.FIREBIRD_HOST, '10.0.0.30');
+    assert.equal(parsedEnv.FIREBIRD_DATABASE, 'C:\\dados\\novo-camera.fdb');
+    assert.equal(isEncryptedSecret(parsedEnv.FIREBIRD_PASSWORD), true);
+    assert.equal(
+      decryptSecret(parsedEnv.FIREBIRD_PASSWORD, parsedEnv.CAMERA_WEB_CONFIG_CRYPTO_KEY),
+      'senha-nova-teste',
+    );
+    assert.equal(result.body.firebird.passwordConfigured, true);
+    assert.equal(result.body.firebird.passwordEncrypted, true);
+    assert.doesNotMatch(envContent, /senha-nova-teste/);
+    assert.doesNotMatch(responseText, /senha-nova-teste|FIREBIRD_PASSWORD|CAMERA_WEB_CONFIG_CRYPTO_KEY|enc:v1/);
+    assert.ok(audit);
+    assert.doesNotMatch(
+      audit.params[4],
+      /senha-nova-teste|FIREBIRD_PASSWORD|CAMERA_WEB_CONFIG_CRYPTO_KEY|enc:v1/,
+    );
+  }, {
+    envContent: [
+      'CAMERA_WEB_LINHA_PRODUCAO_ID=5',
+      'CAMERA_WEB_ESTACAO_NOME=LINHA_05_MANUAL',
+      'FIREBIRD_PASSWORD=masterkey',
+    ].join('\n'),
+  });
+});
+
+test('PUT /api/configuracao-estacao/firebird preserva senha quando campo vem vazio', async () => {
+  const key = generateCryptoKey();
+  const encryptedPassword = encryptSecret('senha-atual-teste', key);
+
+  await withTempServer(async ({ server, envFilePath }) => {
+    const result = await requestJson(server.baseUrl, 'PUT', '/api/configuracao-estacao/firebird', {
+      host: '10.0.0.40',
+      port: 3050,
+      database: 'C:\\dados\\preserva-camera.fdb',
+      user: 'SYSDBA',
+      password: '',
+      role: 'RDB$ADMIN',
+      charset: 'UTF8',
+      pageSize: 4096,
+      poolMax: 4,
+      connectTimeoutMs: 5000,
+    });
+
+    const envContent = await fs.readFile(envFilePath, 'utf8');
+    const parsedEnv = dotenv.parse(envContent);
+
+    assert.equal(result.status, 200);
+    assert.equal(parsedEnv.FIREBIRD_HOST, '10.0.0.40');
+    assert.equal(parsedEnv.FIREBIRD_ROLE, 'RDB$ADMIN');
+    assert.equal(parsedEnv.FIREBIRD_CHARSET, 'UTF8');
+    assert.equal(isEncryptedSecret(parsedEnv.FIREBIRD_PASSWORD), true);
+    assert.equal(
+      decryptSecret(parsedEnv.FIREBIRD_PASSWORD, parsedEnv.CAMERA_WEB_CONFIG_CRYPTO_KEY),
+      'senha-atual-teste',
+    );
+    assert.equal(result.body.firebird.passwordConfigured, true);
+    assert.equal(result.body.firebird.passwordEncrypted, true);
+    assert.doesNotMatch(envContent, /senha-atual-teste/);
+    assert.doesNotMatch(JSON.stringify(result.body), /senha-atual-teste|enc:v1/);
+  }, {
+    envContent: [
+      'CAMERA_WEB_LINHA_PRODUCAO_ID=5',
+      'CAMERA_WEB_ESTACAO_NOME=LINHA_05_MANUAL',
+      'FIREBIRD_PASSWORD=' + encryptedPassword,
+      'CAMERA_WEB_CONFIG_CRYPTO_KEY=' + key,
+    ].join('\n'),
   });
 });
 

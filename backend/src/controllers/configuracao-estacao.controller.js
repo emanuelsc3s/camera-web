@@ -16,7 +16,15 @@ function getRequestContext(req) {
 
 async function get(req, res, next) {
   try {
-    res.json(await configuracaoEstacaoService.getContextoEstacao());
+    res.json(await configuracaoEstacaoService.getConfiguracaoAdministrativa());
+  } catch (erro) {
+    next(erro);
+  }
+}
+
+async function getFirebird(req, res, next) {
+  try {
+    res.json(await configuracaoEstacaoService.getConfiguracaoFirebirdAtual());
   } catch (erro) {
     next(erro);
   }
@@ -26,6 +34,22 @@ async function update(req, res, next) {
   try {
     const context = getRequestContext(req);
     const result = await configuracaoEstacaoService.salvarConfiguracao(req.body || {}, {
+      usuarioId: req.authUser?.usuarioId,
+      usuarioNome: req.authUser?.nome,
+      ip: context.ip,
+      computador: context.computador,
+    });
+
+    res.json(result);
+  } catch (erro) {
+    next(erro);
+  }
+}
+
+async function updateFirebird(req, res, next) {
+  try {
+    const context = getRequestContext(req);
+    const result = await configuracaoEstacaoService.salvarConfiguracaoFirebird(req.body || {}, {
       usuarioId: req.authUser?.usuarioId,
       usuarioNome: req.authUser?.nome,
       ip: context.ip,
@@ -76,8 +100,10 @@ async function listLinhasProducao(req, res, next) {
 
 module.exports = {
   get,
+  getFirebird,
   listLinhasProducao,
   listOpsCadastradas,
   testOpAtiva,
   update,
+  updateFirebird,
 };

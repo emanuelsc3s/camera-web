@@ -7,6 +7,8 @@ const router = express.Router();
 
 router.use(requireAdministrador);
 
+router.get('/firebird', configuracaoEstacaoController.getFirebird);
+router.put('/firebird', configuracaoEstacaoController.updateFirebird);
 router.get('/linhas-producao', configuracaoEstacaoController.listLinhasProducao);
 router.get('/ops-cadastradas', configuracaoEstacaoController.listOpsCadastradas);
 router.get('/teste-op-ativa', configuracaoEstacaoController.testOpAtiva);

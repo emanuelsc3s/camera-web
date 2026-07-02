@@ -26,11 +26,26 @@ export interface ReferenceDataComOpId extends ReferenceData {
   linhaProducaoId: number
 }
 
+export interface FirebirdConfiguracao {
+  host: string
+  port: number
+  database: string
+  user: string
+  role: string
+  charset: string
+  pageSize: number
+  poolMax: number
+  connectTimeoutMs: number
+  passwordConfigured: boolean
+  passwordEncrypted: boolean
+}
+
 export interface ConfiguracaoEstacao {
   configurado: boolean
   linhaProducaoId: number | null
   estacaoNome: string
   opAtiva: ReferenceDataComOpId | null
+  firebird?: FirebirdConfiguracao
 }
 
 export interface OpCadastrada {
@@ -141,6 +156,25 @@ export async function updateConfiguracaoEstacao(data: {
   estacaoNome: string
 }): Promise<ConfiguracaoEstacao> {
   return apiRequest<ConfiguracaoEstacao>('/configuracao-estacao', {
+    method: 'PUT',
+    auth: true,
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateConfiguracaoFirebird(data: {
+  host: string
+  port: number
+  database: string
+  user: string
+  role: string
+  charset: string
+  pageSize: number
+  poolMax: number
+  connectTimeoutMs: number
+  password?: string
+}): Promise<ConfiguracaoEstacao> {
+  return apiRequest<ConfiguracaoEstacao>('/configuracao-estacao/firebird', {
     method: 'PUT',
     auth: true,
     body: JSON.stringify(data),

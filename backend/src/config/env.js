@@ -1,6 +1,8 @@
 const path = require('path');
 const dotenv = require('dotenv');
 
+const { decryptSecret } = require('../utils/config-crypto');
+
 const rootDir = path.resolve(__dirname, '..', '..');
 dotenv.config({ path: path.join(rootDir, '.env'), quiet: true });
 
@@ -46,6 +48,30 @@ function normalizeFirebirdCharset(valor) {
   return charset || 'WIN1252';
 }
 
+function resolveFirebirdPassword(raw) {
+  return decryptSecret(raw.FIREBIRD_PASSWORD || '', raw.CAMERA_WEB_CONFIG_CRYPTO_KEY || '');
+}
+
+function buildFirebirdConfig(raw) {
+  return {
+    host: raw.FIREBIRD_HOST || '127.0.0.1',
+    port: parseInteger('FIREBIRD_PORT', raw.FIREBIRD_PORT, 3050, 1),
+    database: raw.FIREBIRD_DATABASE || '',
+    user: raw.FIREBIRD_USER || 'SYSDBA',
+    password: resolveFirebirdPassword(raw),
+    role: raw.FIREBIRD_ROLE || null,
+    charset: normalizeFirebirdCharset(raw.FIREBIRD_CHARSET),
+    pageSize: parseInteger('FIREBIRD_PAGE_SIZE', raw.FIREBIRD_PAGE_SIZE, 4096, 1024),
+    poolMax: parseInteger('FIREBIRD_POOL_MAX', raw.FIREBIRD_POOL_MAX, 5, 1),
+    connectTimeoutMs: parseInteger(
+      'FIREBIRD_CONNECT_TIMEOUT_MS',
+      raw.FIREBIRD_CONNECT_TIMEOUT_MS,
+      10000,
+      0,
+    ),
+  };
+}
+
 const raw = process.env;
 const rawBackendPort = raw.PORT || raw.BACKEND_PORT;
 
@@ -63,29 +89,18 @@ const env = {
     ),
     allowLocalhost: parseBoolean(raw.CORS_ALLOW_LOCALHOST, true),
   },
-  firebird: {
-    host: raw.FIREBIRD_HOST || '127.0.0.1',
-    port: parseInteger('FIREBIRD_PORT', raw.FIREBIRD_PORT, 3050, 1),
-    database: raw.FIREBIRD_DATABASE || '',
-    user: raw.FIREBIRD_USER || 'SYSDBA',
-    password: raw.FIREBIRD_PASSWORD || '',
-    role: raw.FIREBIRD_ROLE || null,
-    charset: normalizeFirebirdCharset(raw.FIREBIRD_CHARSET),
-    pageSize: parseInteger('FIREBIRD_PAGE_SIZE', raw.FIREBIRD_PAGE_SIZE, 4096, 1024),
-    poolMax: parseInteger('FIREBIRD_POOL_MAX', raw.FIREBIRD_POOL_MAX, 5, 1),
-    connectTimeoutMs: parseInteger(
-      'FIREBIRD_CONNECT_TIMEOUT_MS',
-      raw.FIREBIRD_CONNECT_TIMEOUT_MS,
-      10000,
-      0,
-    ),
-  },
+  firebird: buildFirebirdConfig(raw),
   uploadDir: raw.UPLOAD_DIR || 'uploads',
   jwt: {
     secret: raw.JWT_SECRET || '',
     expiresIn: raw.JWT_EXPIRES_IN || '8h',
   },
 };
+
+function refreshFirebirdEnv(rawValues = process.env) {
+  env.firebird = buildFirebirdConfig(rawValues);
+  return env.firebird;
+}
 
 function isFirebirdConfigured() {
   return Boolean(env.firebird.database && env.firebird.user && env.firebird.password);
@@ -94,4 +109,5 @@ function isFirebirdConfigured() {
 module.exports = {
   env,
   isFirebirdConfigured,
+  refreshFirebirdEnv,
 };

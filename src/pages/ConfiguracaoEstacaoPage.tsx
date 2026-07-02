@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
+  Database,
   Loader2,
   RefreshCw,
   Save,
@@ -37,6 +38,7 @@ import {
 } from '@/components/ui/select'
 import {
   ApiError,
+  type FirebirdConfiguracao,
   type LinhaProducao,
   type OpCadastrada,
   type ReferenceDataComOpId,
@@ -45,9 +47,55 @@ import {
   getOpsCadastradas,
   testarOpAtiva,
   updateConfiguracaoEstacao,
+  updateConfiguracaoFirebird,
 } from '@/services/apiService'
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
+
+interface FirebirdFormState {
+  host: string
+  port: string
+  database: string
+  user: string
+  password: string
+  role: string
+  charset: string
+  pageSize: string
+  poolMax: string
+  connectTimeoutMs: string
+}
+
+const EMPTY_FIREBIRD_FORM: FirebirdFormState = {
+  host: '',
+  port: '',
+  database: '',
+  user: '',
+  password: '',
+  role: '',
+  charset: '',
+  pageSize: '',
+  poolMax: '',
+  connectTimeoutMs: '',
+}
+
+function firebirdToForm(firebird?: FirebirdConfiguracao): FirebirdFormState {
+  if (!firebird) {
+    return EMPTY_FIREBIRD_FORM
+  }
+
+  return {
+    host: firebird.host || '',
+    port: String(firebird.port ?? ''),
+    database: firebird.database || '',
+    user: firebird.user || '',
+    password: '',
+    role: firebird.role || '',
+    charset: firebird.charset || '',
+    pageSize: String(firebird.pageSize ?? ''),
+    poolMax: String(firebird.poolMax ?? ''),
+    connectTimeoutMs: String(firebird.connectTimeoutMs ?? ''),
+  }
+}
 
 function parseLinhaInput(value: string): number {
   const text = value.trim()
@@ -59,6 +107,21 @@ function parseLinhaInput(value: string): number {
   const parsed = Number.parseInt(text, 10)
   if (parsed < 1) {
     throw new Error('Informe uma linha de produção válida.')
+  }
+
+  return parsed
+}
+
+function parseFirebirdInteger(value: string, label: string, minimum: number): number {
+  const text = value.trim()
+
+  if (!/^\d+$/.test(text)) {
+    throw new Error(`Informe um valor numérico válido para ${label}.`)
+  }
+
+  const parsed = Number.parseInt(text, 10)
+  if (parsed < minimum) {
+    throw new Error(`${label} deve ser maior ou igual a ${minimum}.`)
   }
 
   return parsed
@@ -443,6 +506,7 @@ export default function ConfiguracaoEstacaoPage() {
   const [isLinhasOpen, setIsLinhasOpen] = useState(false)
   const [isOpsOpen, setIsOpsOpen] = useState(false)
   const [testResult, setTestResult] = useState<ReferenceDataComOpId | null | undefined>(undefined)
+  const [firebirdForm, setFirebirdForm] = useState<FirebirdFormState>(EMPTY_FIREBIRD_FORM)
 
   const configuracaoQuery = useQuery({
     queryKey: ['configuracao-estacao'],
@@ -455,6 +519,7 @@ export default function ConfiguracaoEstacaoPage() {
 
     setLinhaInput(configuracaoQuery.data.linhaProducaoId?.toString() || '')
     setEstacaoNome(configuracaoQuery.data.estacaoNome || '')
+    setFirebirdForm(firebirdToForm(configuracaoQuery.data.firebird))
     setTestResult(undefined)
   }, [configuracaoQuery.data])
 
@@ -492,6 +557,62 @@ export default function ConfiguracaoEstacaoPage() {
       toast.error(formatApiError(error))
     },
   })
+
+  const saveFirebirdMutation = useMutation({
+    mutationFn: async () => {
+      if (!firebirdForm.host.trim()) {
+        throw new Error('Informe o host do Firebird.')
+      }
+
+      if (!firebirdForm.database.trim()) {
+        throw new Error('Informe o caminho do banco de dados.')
+      }
+
+      if (!firebirdForm.user.trim()) {
+        throw new Error('Informe o usuário do Firebird.')
+      }
+
+      if (!firebirdForm.charset.trim()) {
+        throw new Error('Informe o charset do Firebird.')
+      }
+
+      if (!currentData?.firebird?.passwordConfigured && !firebirdForm.password) {
+        throw new Error('Informe a senha do Firebird.')
+      }
+
+      return updateConfiguracaoFirebird({
+        host: firebirdForm.host.trim(),
+        port: parseFirebirdInteger(firebirdForm.port, 'porta', 1),
+        database: firebirdForm.database.trim(),
+        user: firebirdForm.user.trim(),
+        role: firebirdForm.role.trim(),
+        charset: firebirdForm.charset.trim(),
+        pageSize: parseFirebirdInteger(firebirdForm.pageSize, 'page size', 1024),
+        poolMax: parseFirebirdInteger(firebirdForm.poolMax, 'pool máximo', 1),
+        connectTimeoutMs: parseFirebirdInteger(
+          firebirdForm.connectTimeoutMs,
+          'timeout de conexão',
+          0
+        ),
+        password: firebirdForm.password,
+      })
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['configuracao-estacao'], data)
+      setFirebirdForm(firebirdToForm(data.firebird))
+      toast.success('Configuração de conexão salva com sucesso.')
+    },
+    onError: (error) => {
+      toast.error(formatApiError(error))
+    },
+  })
+
+  const handleFirebirdFieldChange = (field: keyof FirebirdFormState, value: string) => {
+    setFirebirdForm((currentForm) => ({
+      ...currentForm,
+      [field]: value,
+    }))
+  }
 
   const handleOpenConfirm = () => {
     try {
@@ -612,6 +733,145 @@ export default function ConfiguracaoEstacaoPage() {
                       onChange={(event) => setEstacaoNome(event.target.value)}
                       placeholder="Ex.: LINHA_05_MANUAL"
                     />
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-lg border bg-card shadow-sm">
+                <div className="border-b bg-muted/50 px-4 py-3">
+                  <h2 className="flex items-center gap-2 text-base font-semibold">
+                    <Database className="w-4 h-4 text-primary" />
+                    Conexão com banco de dados
+                  </h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firebirdHost">Host</Label>
+                    <Input
+                      id="firebirdHost"
+                      value={firebirdForm.host}
+                      onChange={(event) => handleFirebirdFieldChange('host', event.target.value)}
+                      placeholder="Ex.: 127.0.0.1"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="firebirdPort">Porta</Label>
+                    <Input
+                      id="firebirdPort"
+                      inputMode="numeric"
+                      value={firebirdForm.port}
+                      onChange={(event) => handleFirebirdFieldChange('port', event.target.value)}
+                      placeholder="3050"
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="firebirdDatabase">Banco de dados</Label>
+                    <Input
+                      id="firebirdDatabase"
+                      value={firebirdForm.database}
+                      onChange={(event) => handleFirebirdFieldChange('database', event.target.value)}
+                      placeholder="C:\caminho\para\banco.fdb"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="firebirdUser">Usuário</Label>
+                    <Input
+                      id="firebirdUser"
+                      value={firebirdForm.user}
+                      onChange={(event) => handleFirebirdFieldChange('user', event.target.value)}
+                      placeholder="SYSDBA"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="firebirdPassword">Senha</Label>
+                    <Input
+                      id="firebirdPassword"
+                      type="password"
+                      autoComplete="new-password"
+                      value={firebirdForm.password}
+                      onChange={(event) => handleFirebirdFieldChange('password', event.target.value)}
+                      placeholder={
+                        currentData?.firebird?.passwordConfigured
+                          ? 'Senha já configurada. Preencha para alterar.'
+                          : 'Informe a senha do Firebird'
+                      }
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      {currentData?.firebird?.passwordConfigured
+                        ? currentData.firebird.passwordEncrypted
+                          ? 'Senha configurada e criptografada no .env.'
+                          : 'Senha configurada em texto puro; será criptografada ao salvar.'
+                        : 'Nenhuma senha configurada.'}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="firebirdRole">Role</Label>
+                    <Input
+                      id="firebirdRole"
+                      value={firebirdForm.role}
+                      onChange={(event) => handleFirebirdFieldChange('role', event.target.value)}
+                      placeholder="Opcional"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="firebirdCharset">Charset</Label>
+                    <Input
+                      id="firebirdCharset"
+                      value={firebirdForm.charset}
+                      onChange={(event) => handleFirebirdFieldChange('charset', event.target.value)}
+                      placeholder="WIN1252"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="firebirdPageSize">Page size</Label>
+                    <Input
+                      id="firebirdPageSize"
+                      inputMode="numeric"
+                      value={firebirdForm.pageSize}
+                      onChange={(event) => handleFirebirdFieldChange('pageSize', event.target.value)}
+                      placeholder="4096"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="firebirdPoolMax">Pool máximo</Label>
+                    <Input
+                      id="firebirdPoolMax"
+                      inputMode="numeric"
+                      value={firebirdForm.poolMax}
+                      onChange={(event) => handleFirebirdFieldChange('poolMax', event.target.value)}
+                      placeholder="5"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="firebirdTimeout">Timeout de conexão (ms)</Label>
+                    <Input
+                      id="firebirdTimeout"
+                      inputMode="numeric"
+                      value={firebirdForm.connectTimeoutMs}
+                      onChange={(event) => handleFirebirdFieldChange('connectTimeoutMs', event.target.value)}
+                      placeholder="10000"
+                    />
+                  </div>
+
+                  <div className="flex items-end justify-end md:col-span-2">
+                    <Button
+                      type="button"
+                      onClick={() => saveFirebirdMutation.mutate()}
+                      disabled={saveFirebirdMutation.isPending}
+                      className="gap-2"
+                    >
+                      <Save className="w-4 h-4" />
+                      {saveFirebirdMutation.isPending ? 'Salvando...' : 'Salvar conexão'}
+                    </Button>
                   </div>
                 </div>
               </section>
