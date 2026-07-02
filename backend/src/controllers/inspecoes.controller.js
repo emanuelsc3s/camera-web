@@ -67,7 +67,7 @@ function optionalString(value, fieldName, maxLength) {
 
 function parseConformity(value, fieldName) {
   if (value === null || value === undefined) {
-    return null;
+    throw badRequest(`Campo '${fieldName}' é obrigatório e deve estar aprovado ou reprovado.`);
   }
 
   if (value === true || value === 'Sim') {
@@ -78,7 +78,7 @@ function parseConformity(value, fieldName) {
     return 'Não';
   }
 
-  throw badRequest(`Campo '${fieldName}' deve ser true, false, 'Sim', 'Não' ou null.`);
+  throw badRequest(`Campo '${fieldName}' deve ser true, false, 'Sim' ou 'Não'.`);
 }
 
 function conformidadeToBoolean(value) {

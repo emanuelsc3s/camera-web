@@ -96,6 +96,7 @@ export default function HomePage() {
 
   const temInspecaoEmAndamento = Boolean(lastPhoto) ||
     Object.values(inspectionStates).some((state) => state !== null)
+  const todosItensInspecionados = Object.values(inspectionStates).every((state) => state !== null)
 
   useEffect(() => {
     if (!contextoQuery.isSuccess) {
@@ -185,8 +186,7 @@ export default function HomePage() {
     }
 
     // Valida se todos os itens foram inspecionados
-    const allInspected = Object.values(inspectionStates).every(state => state !== null)
-    if (!allInspected) {
+    if (!todosItensInspecionados) {
       toast.error('Marque todos os itens de inspeção antes de salvar!')
       return
     }
@@ -532,7 +532,7 @@ export default function HomePage() {
                 style={{ height: '36px', minWidth: '166px', paddingLeft: '12px', paddingRight: '12px' }}
                 className="rounded-md gap-1 sm:gap-1.5 md:gap-2 text-xs sm:text-sm"
                 onClick={handleSaveInspection}
-                disabled={!lastPhoto || !opAtiva || createInspectionMutation.isPending}
+                disabled={!lastPhoto || !opAtiva || !todosItensInspecionados || createInspectionMutation.isPending}
               >
                 <Save className="w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4" />
                 <span className="hidden sm:inline">SALVAR</span>

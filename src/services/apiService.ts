@@ -1,5 +1,5 @@
 import { API_BASE_URL, getAuthSession } from '@/services/authService'
-import type { InspectionStates, ReferenceData } from '@/types/inspection'
+import type { InspectionRecord, InspectionStates, PaginatedResult, ReferenceData } from '@/types/inspection'
 
 export interface ApiErrorOptions {
   status: number
@@ -87,6 +87,15 @@ export interface InspectionSummary {
   reprovados: number
 }
 
+export interface ListInspectionsParams {
+  page: number
+  limit: number
+  campo?: string
+  termo?: string
+}
+
+export type PaginatedInspections = PaginatedResult<InspectionRecord>
+
 export interface CreateInspectionPayload {
   opAtivaIdConfirmado: number
   fotoBase64: string
@@ -141,6 +150,32 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
   })
 
   return parseJson<T>(response)
+}
+
+function getRuntimeOrigin(): string {
+  return globalThis.location?.origin || 'http://localhost'
+}
+
+function resolveApiResourceUrl(value: string | null | undefined): string {
+  const text = String(value || '').trim()
+
+  if (!text) {
+    return ''
+  }
+
+  if (/^(https?:|data:|blob:)/i.test(text)) {
+    return text
+  }
+
+  return new URL(text, new URL(API_BASE_URL, getRuntimeOrigin())).toString()
+}
+
+function normalizeInspectionRecord(record: InspectionRecord): InspectionRecord {
+  return {
+    ...record,
+    timestamp: typeof record.timestamp === 'number' ? record.timestamp : 0,
+    foto: resolveApiResourceUrl(record.foto),
+  }
 }
 
 export async function getContextoEstacao(): Promise<ConfiguracaoEstacao> {
@@ -233,6 +268,56 @@ export async function createInspection(data: CreateInspectionPayload): Promise<{
   return apiRequest('/inspecoes', {
     method: 'POST',
     body: JSON.stringify(data),
+  })
+}
+
+export async function listInspections(params: ListInspectionsParams): Promise<PaginatedInspections> {
+  const searchParams = new URLSearchParams({
+    page: String(params.page),
+    limit: String(params.limit),
+  })
+
+  if (params.campo) {
+    searchParams.set('campo', params.campo)
+  }
+
+  if (params.termo?.trim()) {
+    searchParams.set('termo', params.termo.trim())
+  }
+
+  const result = await apiRequest<PaginatedInspections>(`/inspecoes?${searchParams.toString()}`)
+
+  return {
+    ...result,
+    data: result.data.map(normalizeInspectionRecord),
+  }
+}
+
+export async function getInspectionById(id: string | number): Promise<InspectionRecord> {
+  const record = await apiRequest<InspectionRecord>(`/inspecoes/${id}`)
+  return normalizeInspectionRecord(record)
+}
+
+export async function deleteInspection(id: string | number, audit?: {
+  usuarioId?: number
+  usuario?: string
+}): Promise<{ message: string }> {
+  return apiRequest(`/inspecoes/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify(audit || {}),
+  })
+}
+
+export async function deleteInspectionsBatch(ids: Array<string | number>, audit?: {
+  usuarioId?: number
+  usuario?: string
+}): Promise<{ message: string; deletedCount: number }> {
+  return apiRequest('/inspecoes/batch', {
+    method: 'DELETE',
+    body: JSON.stringify({
+      ids,
+      ...(audit || {}),
+    }),
   })
 }
 

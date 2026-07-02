@@ -31,7 +31,7 @@ export interface InspectionStates {
 // Status final da inspeção
 export type InspectionStatus = 'APROVADO' | 'REPROVADO' | 'ABERTO'
 
-// Registro completo de inspeção salvo no localStorage
+// Registro completo de inspeção retornado pela API
 export interface InspectionRecord {
   // Identificador único do registro
   id: string

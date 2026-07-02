@@ -709,3 +709,111 @@ test('POST /api/inspecoes rejeita salvamento quando OP ativa mudou', async () =>
     envContent: 'CAMERA_WEB_LINHA_PRODUCAO_ID=5\nCAMERA_WEB_ESTACAO_NOME=LINHA_05_MANUAL\n',
   });
 });
+
+test('POST /api/inspecoes rejeita conformidade pendente', async () => {
+  await withTempServer(async ({ server, mockDatabase }) => {
+    const result = await requestJson(server.baseUrl, 'POST', '/api/inspecoes', {
+      opAtivaIdConfirmado: 999,
+      fotoBase64: 'data:image/jpeg;base64,/9j/2Q==',
+      inspectionStates: {
+        gtin: true,
+        datamatrix: null,
+        lote: true,
+        validade: true,
+      },
+    }, null);
+
+    const insertQuery = mockDatabase.calls.find((call) => /INSERT INTO TBINSPECAO_MANUAL/.test(call.sql));
+
+    assert.equal(result.status, 400);
+    assert.equal(result.body.code, 'REQUISICAO_INVALIDA');
+    assert.equal(insertQuery, undefined);
+  }, {
+    envContent: 'CAMERA_WEB_LINHA_PRODUCAO_ID=5\nCAMERA_WEB_ESTACAO_NOME=LINHA_05_MANUAL\n',
+  });
+});
+
+test('POST /api/inspecoes grava inspeção manual na TBINSPECAO_MANUAL', async () => {
+  await withTempServer(async ({ server, mockDatabase, tempDir }) => {
+    const result = await requestJson(server.baseUrl, 'POST', '/api/inspecoes', {
+      opAtivaIdConfirmado: 999,
+      fotoBase64: 'data:image/jpeg;base64,/9j/2Q==',
+      inspectionStates: {
+        gtin: true,
+        datamatrix: false,
+        lote: true,
+        validade: true,
+      },
+      usuarioId: 12,
+      usuario: 'Operador Teste',
+      observacoes: 'Amostra reprovada no datamatrix',
+    }, null);
+
+    const insertQuery = mockDatabase.calls.find((call) => /INSERT INTO TBINSPECAO_MANUAL/.test(call.sql));
+    const sessionCall = mockDatabase.calls.find((call) => call.sql === 'SET_SESSION_USER');
+
+    assert.equal(result.status, 201);
+    assert.equal(result.body.id, 123);
+    assert.equal(result.body.status, 'Rejeitado');
+    assert.equal(sessionCall.params[0], 'Operador Teste');
+    assert.ok(insertQuery);
+    assert.equal(insertQuery.scope, 'tx');
+    assert.equal(insertQuery.params[0], 123);
+    assert.equal(insertQuery.params[1], 'Rejeitado');
+    assert.equal(insertQuery.params[2], 999);
+    assert.equal(insertQuery.params[3], '146728');
+    assert.match(insertQuery.params[12], /^\d{4}\/\d{2}\/\d{2}\/123_\d+\.jpg$/);
+    assert.deepEqual(insertQuery.params.slice(13, 17), ['Sim', 'Não', 'Sim', 'Sim']);
+    assert.equal(insertQuery.params[17], 'Amostra reprovada no datamatrix');
+    assert.equal(insertQuery.params[18], 12);
+    assert.equal(insertQuery.params[19], 'Operador Teste');
+    assert.equal(insertQuery.params[21], 12);
+    assert.equal(insertQuery.params[22], 'Operador Teste');
+
+    await fs.access(path.join(tempDir, 'uploads', ...insertQuery.params[12].split('/')));
+  }, {
+    envContent: 'CAMERA_WEB_LINHA_PRODUCAO_ID=5\nCAMERA_WEB_ESTACAO_NOME=LINHA_05_MANUAL\n',
+    databaseHandler: async ({ sql }) => {
+      if (/FROM TBOP o/.test(sql)) {
+        return [createOpAtiva()];
+      }
+
+      if (/GEN_TBINSPECAOMANUAL_ID/.test(sql)) {
+        return [{ ID: 123 }];
+      }
+
+      return [];
+    },
+  });
+});
+
+test('GET /api/inspecoes aplica filtro geral na TBINSPECAO_MANUAL', async () => {
+  await withTempServer(async ({ server, mockDatabase }) => {
+    const result = await requestJson(
+      server.baseUrl,
+      'GET',
+      '/api/inspecoes?page=1&limit=10&campo=todos&termo=146728',
+      undefined,
+      null,
+    );
+
+    const listQuery = mockDatabase.calls.find((call) => /ORDER BY DATA DESC/.test(call.sql));
+    const countQuery = mockDatabase.calls.find((call) => /SELECT COUNT\(\*\) AS TOTAL/.test(call.sql));
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.total, 0);
+    assert.match(listQuery.sql, /REGISTRO_ANVISA/);
+    assert.match(listQuery.sql, /CAST\(DATA AS VARCHAR\(500\)\)/);
+    assert.equal(listQuery.params.filter((param) => param === '146728').length > 1, true);
+    assert.equal(countQuery.params.filter((param) => param === '146728').length > 1, true);
+  }, {
+    envContent: 'CAMERA_WEB_LINHA_PRODUCAO_ID=5\nCAMERA_WEB_ESTACAO_NOME=LINHA_05_MANUAL\n',
+    databaseHandler: async ({ sql }) => {
+      if (/SELECT COUNT\(\*\) AS TOTAL/.test(sql)) {
+        return [{ TOTAL: 0 }];
+      }
+
+      return [];
+    },
+  });
+});

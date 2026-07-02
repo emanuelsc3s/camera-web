@@ -62,7 +62,7 @@ function buildFilter(campo, termo) {
   const normalizedField = String(campo || '').trim();
   const normalizedTerm = String(termo || '').trim();
 
-  if (!normalizedField || normalizedField === 'todos' || !normalizedTerm) {
+  if (!normalizedTerm) {
     return {
       clause: '',
       params: [],
@@ -70,14 +70,21 @@ function buildFilter(campo, termo) {
   }
 
   const textFields = {
+    dataHora: 'DATA',
     op: 'OP',
     lote: 'LOTE',
+    validade: 'VALIDADE',
     produto: 'PRODUTO',
     gtin: 'GTIN',
+    registroAnvisa: 'REGISTRO_ANVISA',
     usuario: 'USUARIO',
     fase: 'FASE',
     status: 'STATUS',
   };
+
+  const buildTextSearch = (expression) => (
+    `UPPER(COALESCE(CAST(${expression} AS VARCHAR(500)), '')) CONTAINING UPPER(?)`
+  );
 
   if (normalizedField === 'linhaProducaoId') {
     const parsed = Number.parseInt(normalizedTerm, 10);
@@ -92,6 +99,15 @@ function buildFilter(campo, termo) {
     };
   }
 
+  if (!normalizedField || normalizedField === 'todos') {
+    const expressions = Object.values(textFields);
+
+    return {
+      clause: ` AND (${expressions.map(buildTextSearch).join(' OR ')})`,
+      params: expressions.map(() => normalizedTerm),
+    };
+  }
+
   const column = textFields[normalizedField];
 
   if (!column) {
@@ -102,7 +118,7 @@ function buildFilter(campo, termo) {
   }
 
   return {
-    clause: ` AND UPPER(${column}) CONTAINING UPPER(?)`,
+    clause: ` AND ${buildTextSearch(column)}`,
     params: [normalizedTerm],
   };
 }

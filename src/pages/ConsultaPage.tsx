@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -27,39 +28,59 @@ import {
 } from 'lucide-react'
 import type { InspectionRecord } from '@/types/inspection'
 import {
-  getAllRecords,
-  filterRecords,
-  getPaginatedRecords
-} from '@/services/storageService'
+  ApiError,
+  getInspectionById,
+  listInspections,
+} from '@/services/apiService'
 
 export default function ConsultaPage() {
   const navigate = useNavigate()
-  
+
   // Estados
-  const [records] = useState<InspectionRecord[]>(getAllRecords())
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [searchField, setSearchField] = useState('todos')
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedRecord, setSelectedRecord] = useState<InspectionRecord | null>(null)
+  const [selectedRecordPreview, setSelectedRecordPreview] = useState<InspectionRecord | null>(null)
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
 
-  // Filtra registros com base na busca
-  const filteredRecords = useMemo(() => {
-    if (!searchTerm.trim()) {
-      return records
-    }
-    return filterRecords(searchField, searchTerm)
-  }, [records, searchField, searchTerm])
+  const inspectionsQuery = useQuery({
+    queryKey: ['inspecoes', 'lista', currentPage, pageSize, searchField, searchTerm],
+    queryFn: () => listInspections({
+      page: currentPage,
+      limit: pageSize,
+      campo: searchField,
+      termo: searchTerm,
+    }),
+    placeholderData: (previousData) => previousData,
+  })
 
-  // Paginação
-  const paginatedData = useMemo(() => {
-    return getPaginatedRecords({ page: currentPage, pageSize }, filteredRecords)
-  }, [currentPage, pageSize, filteredRecords])
+  const detailQuery = useQuery({
+    queryKey: ['inspecoes', 'detalhe', selectedRecordId],
+    queryFn: () => getInspectionById(selectedRecordId!),
+    enabled: Boolean(selectedRecordId),
+  })
+
+  const paginatedData = inspectionsQuery.data ?? {
+    data: [],
+    total: 0,
+    page: currentPage,
+    pageSize,
+    totalPages: 0,
+  }
+
+  const selectedRecord = detailQuery.data ?? selectedRecordPreview
+  const errorMessage = inspectionsQuery.error instanceof ApiError
+    ? inspectionsQuery.error.message
+    : inspectionsQuery.error instanceof Error
+      ? inspectionsQuery.error.message
+      : null
 
   // Visualiza detalhes de um registro
   const handleViewDetails = (record: InspectionRecord) => {
-    setSelectedRecord(record)
+    setSelectedRecordPreview(record)
+    setSelectedRecordId(record.id)
     setIsDetailModalOpen(true)
   }
 
@@ -104,7 +125,13 @@ export default function ConsultaPage() {
       {/* Filtros */}
       <div className="flex-none border-b bg-muted/30 px-4 py-3">
         <div className="flex flex-col sm:flex-row gap-3">
-          <Select value={searchField} onValueChange={setSearchField}>
+          <Select
+            value={searchField}
+            onValueChange={(value) => {
+              setSearchField(value)
+              setCurrentPage(1)
+            }}
+          >
             <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="Campo de busca" />
             </SelectTrigger>
@@ -128,13 +155,16 @@ export default function ConsultaPage() {
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value)
-                setCurrentPage(1) // Volta para primeira página ao buscar
+                setCurrentPage(1)
               }}
               className="w-full pl-10 pr-10 py-2 border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
             />
             {searchTerm && (
               <button
-                onClick={() => setSearchTerm('')}
+                onClick={() => {
+                  setSearchTerm('')
+                  setCurrentPage(1)
+                }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 <X className="w-4 h-4" />
@@ -146,7 +176,22 @@ export default function ConsultaPage() {
 
       {/* Conteúdo principal - Tabela */}
       <div className="flex-1 overflow-auto p-4">
-        {paginatedData.data.length === 0 ? (
+        {inspectionsQuery.isLoading ? (
+          <Card className="p-8 text-center">
+            <p className="text-muted-foreground">Carregando inspeções...</p>
+          </Card>
+        ) : errorMessage ? (
+          <Card className="p-8 text-center">
+            <p className="text-destructive">{errorMessage}</p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => inspectionsQuery.refetch()}
+            >
+              Tentar novamente
+            </Button>
+          </Card>
+        ) : paginatedData.data.length === 0 ? (
           <Card className="p-8 text-center">
             <p className="text-muted-foreground">
               {searchTerm ? 'Nenhum registro encontrado com os critérios de busca.' : 'Nenhum registro de inspeção salvo.'}
@@ -179,13 +224,23 @@ export default function ConsultaPage() {
                       }`}
                     >
                       <td className="p-3">
-                        <img
-                          src={record.foto}
-                          alt="Foto da inspeção"
-                          className="w-16 h-16 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
-                          onClick={() => handleViewDetails(record)}
-                          title="Clique para visualizar detalhes"
-                        />
+                        {record.foto ? (
+                          <img
+                            src={record.foto}
+                            alt="Foto da inspeção"
+                            className="w-16 h-16 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={() => handleViewDetails(record)}
+                            title="Clique para visualizar detalhes"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className="w-16 h-16 rounded border bg-muted text-xs text-muted-foreground"
+                            onClick={() => handleViewDetails(record)}
+                          >
+                            Sem foto
+                          </button>
+                        )}
                       </td>
                       <td className="p-3 text-sm">
                         {isReprovado ? (
@@ -282,7 +337,16 @@ export default function ConsultaPage() {
       )}
 
       {/* Modal de Detalhes */}
-      <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
+      <Dialog
+        open={isDetailModalOpen}
+        onOpenChange={(open) => {
+          setIsDetailModalOpen(open)
+          if (!open) {
+            setSelectedRecordId(null)
+            setSelectedRecordPreview(null)
+          }
+        }}
+      >
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg">Detalhes da Inspeção</DialogTitle>
@@ -291,16 +355,34 @@ export default function ConsultaPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {selectedRecord && (
+          {detailQuery.isFetching && !selectedRecord ? (
+            <Card className="p-6 text-center">
+              <p className="text-muted-foreground">Carregando detalhes...</p>
+            </Card>
+          ) : detailQuery.error ? (
+            <Card className="p-6 text-center">
+              <p className="text-destructive">
+                {detailQuery.error instanceof ApiError
+                  ? detailQuery.error.message
+                  : 'Não foi possível carregar os detalhes da inspeção.'}
+              </p>
+            </Card>
+          ) : selectedRecord && (
             <div className="space-y-4">
               {/* Foto */}
               <div>
                 <h3 className="font-semibold mb-2 text-base">Foto Capturada</h3>
-                <img
-                  src={selectedRecord.foto}
-                  alt="Foto da inspeção"
-                  className="w-full rounded-lg border"
-                />
+                {selectedRecord.foto ? (
+                  <img
+                    src={selectedRecord.foto}
+                    alt="Foto da inspeção"
+                    className="w-full rounded-lg border"
+                  />
+                ) : (
+                  <div className="grid min-h-40 place-items-center rounded-lg border bg-muted text-muted-foreground">
+                    Sem foto vinculada
+                  </div>
+                )}
               </div>
 
               {/* Status Final */}
