@@ -50,6 +50,15 @@ public/fonts/
 
 # BANCO DE DADOS
 
+## Consulta de Estrutura Firebird 2.5
+
+- Quando houver dúvida sobre a estrutura real da base Firebird 2.5 do projeto, consultar o metadata diretamente com `C:\Program Files\Firebird\Firebird_2_5\bin\isql.exe`.
+- Usar as configurações de conexão do `backend/.env`, especialmente `FIREBIRD_HOST`, `FIREBIRD_PORT`, `FIREBIRD_DATABASE`, `FIREBIRD_USER`, `FIREBIRD_PASSWORD`, `FIREBIRD_ROLE` e `FIREBIRD_CHARSET`.
+- Não registrar nem expor valores sensíveis do `.env`, como `FIREBIRD_PASSWORD` ou `JWT_SECRET`, em documentação, logs de resposta ou exemplos.
+- As consultas via `isql.exe` devem ser **somente leitura** por padrão. Usar apenas comandos como `SHOW TABLES`, `SHOW TABLE <nome>`, `SHOW INDEXES`, `SHOW TRIGGERS`, `SHOW GENERATORS` e `SELECT` em tabelas de metadata (`RDB$...`) ou consultas de validação sem efeito colateral.
+- Ao executar scripts SQL para inspeção, iniciar com `SET TRANSACTION READ ONLY;` e finalizar com `ROLLBACK;`.
+- **Nunca** executar `DELETE`, `UPDATE`, `INSERT`, `MERGE`, `EXECUTE PROCEDURE` com efeito de escrita, `CREATE`, `ALTER`, `DROP`, `RECREATE` ou `COMMIT` na base do cliente durante inspeções. Escritas só podem ocorrer quando o usuário solicitar explicitamente essa ação.
+
 ## Registro de Migrations Firebird 2.5
 
 - Sempre que uma mudança alterar estrutura da base de dados, criar um SQL de migration para Firebird 2.5 em `docs/firebird-integration/migrations/`.
