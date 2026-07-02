@@ -703,10 +703,10 @@ export default function ConfiguracaoEstacaoPage() {
                 <div className="border-b bg-muted/50 px-4 py-3">
                   <h2 className="text-base font-semibold">Dados da estação</h2>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-                  <div className="space-y-2">
+                <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-4">
+                  <div className="space-y-2 md:col-span-1">
                     <Label htmlFor="linhaProducaoId">Linha de produção</Label>
-                    <div className="flex gap-2">
+                    <div className="flex w-full gap-2">
                       <Input
                         id="linhaProducaoId"
                         inputMode="numeric"
@@ -730,7 +730,7 @@ export default function ConfiguracaoEstacaoPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2 md:col-span-3">
                     <Label htmlFor="estacaoNome">Nome da estação</Label>
                     <Input
                       id="estacaoNome"
