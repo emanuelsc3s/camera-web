@@ -44,6 +44,11 @@ export interface OpCadastrada {
   validade: string
 }
 
+export interface LinhaProducao {
+  linhaProducaoId: number
+  linhaProducao: string
+}
+
 export interface PaginationInfo {
   page: number
   limit: number
@@ -53,6 +58,11 @@ export interface PaginationInfo {
 
 export interface PaginatedOpsCadastradas {
   data: OpCadastrada[]
+  pagination: PaginationInfo
+}
+
+export interface PaginatedLinhasProducao {
+  data: LinhaProducao[]
   pagination: PaginationInfo
 }
 
@@ -148,6 +158,21 @@ export async function getOpsCadastradas(params: {
 
   return apiRequest<PaginatedOpsCadastradas>(
     `/configuracao-estacao/ops-cadastradas?${searchParams.toString()}`,
+    { auth: true }
+  )
+}
+
+export async function getLinhasProducao(params: {
+  page: number
+  limit: number
+}): Promise<PaginatedLinhasProducao> {
+  const searchParams = new URLSearchParams({
+    page: String(params.page),
+    limit: String(params.limit),
+  })
+
+  return apiRequest<PaginatedLinhasProducao>(
+    `/configuracao-estacao/linhas-producao?${searchParams.toString()}`,
     { auth: true }
   )
 }

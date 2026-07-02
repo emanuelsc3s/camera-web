@@ -60,8 +60,23 @@ async function listOpsCadastradas(req, res, next) {
   }
 }
 
+async function listLinhasProducao(req, res, next) {
+  try {
+    const pagination = parsePagination(req.query, {
+      defaultPage: 1,
+      defaultLimit: 10,
+      maxLimit: 50,
+    });
+
+    res.json(await configuracaoEstacaoService.listarLinhasProducao(pagination));
+  } catch (erro) {
+    next(erro);
+  }
+}
+
 module.exports = {
   get,
+  listLinhasProducao,
   listOpsCadastradas,
   testOpAtiva,
   update,

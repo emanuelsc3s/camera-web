@@ -12,6 +12,7 @@ const { HttpError, notFound } = require('../utils/http-error');
 const LINHA_KEY = 'CAMERA_WEB_LINHA_PRODUCAO_ID';
 const ESTACAO_KEY = 'CAMERA_WEB_ESTACAO_NOME';
 const ESTACAO_MAX_LENGTH = 80;
+const DEFAULT_LINHA_PAGE_TOTAL = 0;
 const DEFAULT_OP_PAGE_TOTAL = 0;
 
 let writeQueue = Promise.resolve();
@@ -226,6 +227,50 @@ function formatOpCadastrada(row) {
   };
 }
 
+function formatLinhaProducao(row) {
+  const linhaProducaoId = row.LINHAPRODUCAO_ID;
+  const linhaProducao = normalizeText(row.LINHAPRODUCAO) || `LINHA_${linhaProducaoId}`;
+
+  return {
+    linhaProducaoId,
+    linhaProducao,
+  };
+}
+
+async function listarLinhasProducao({ page, limit, startRow, endRow }) {
+  const countRows = await database.query(`
+    SELECT COUNT(*) AS TOTAL
+    FROM TBLINHA_PRODUCAO
+    WHERE COALESCE(DELETADO, 'N') = 'N'
+  `);
+
+  const total = Number(countRows[0]?.TOTAL ?? DEFAULT_LINHA_PAGE_TOTAL);
+  const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
+
+  const rows = await database.query(
+    `
+      SELECT
+        LINHAPRODUCAO_ID,
+        LINHAPRODUCAO
+      FROM TBLINHA_PRODUCAO
+      WHERE COALESCE(DELETADO, 'N') = 'N'
+      ORDER BY LINHAPRODUCAO_ID
+      ROWS ? TO ?
+    `,
+    [startRow, endRow],
+  );
+
+  return {
+    data: rows.map(formatLinhaProducao),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages,
+    },
+  };
+}
+
 async function listarOpsCadastradas({ page, limit, startRow, endRow }) {
   const countRows = await database.query(`
     SELECT COUNT(*) AS TOTAL
@@ -331,6 +376,7 @@ module.exports = {
   getContextoEstacao,
   getLinhaProducaoIdOperacional,
   getLinhaProducaoIdConfigurada,
+  listarLinhasProducao,
   listarOpsCadastradas,
   requireLinhaProducaoConfigurada,
   salvarConfiguracao,

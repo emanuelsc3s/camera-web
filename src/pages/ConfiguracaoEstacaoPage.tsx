@@ -37,15 +37,17 @@ import {
 } from '@/components/ui/select'
 import {
   ApiError,
+  type LinhaProducao,
   type OpCadastrada,
   type ReferenceDataComOpId,
   getConfiguracaoEstacao,
+  getLinhasProducao,
   getOpsCadastradas,
   testarOpAtiva,
   updateConfiguracaoEstacao,
 } from '@/services/apiService'
 
-const OPS_PAGE_SIZE_OPTIONS = [10, 25, 50]
+const PAGE_SIZE_OPTIONS = [10, 25, 50]
 
 function parseLinhaInput(value: string): number {
   const text = value.trim()
@@ -171,7 +173,7 @@ function OpsCadastradasDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {OPS_PAGE_SIZE_OPTIONS.map((option) => (
+                  {PAGE_SIZE_OPTIONS.map((option) => (
                     <SelectItem key={option} value={String(option)}>
                       {option}
                     </SelectItem>
@@ -275,12 +277,170 @@ function OpsCadastradasDialog({
   )
 }
 
+interface LinhasProducaoDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSelect: (linha: LinhaProducao) => void
+}
+
+function LinhasProducaoDialog({
+  open,
+  onOpenChange,
+  onSelect,
+}: LinhasProducaoDialogProps) {
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+
+  const linhasQuery = useQuery({
+    queryKey: ['configuracao-estacao', 'linhas-producao', page, limit],
+    queryFn: () => getLinhasProducao({ page, limit }),
+    enabled: open,
+    retry: false,
+  })
+
+  const linhas = linhasQuery.data?.data ?? []
+  const pagination = linhasQuery.data?.pagination
+  const totalPages = pagination?.totalPages ?? 0
+  const hasPreviousPage = page > 1
+  const hasNextPage = totalPages > 0 && page < totalPages
+  const pageLabel = totalPages > 0 ? `Página ${page} de ${totalPages}` : 'Página 0 de 0'
+  const totalLabel = pagination?.total === 1
+    ? '1 linha encontrada'
+    : `${pagination?.total ?? 0} linhas encontradas`
+  const errorMessage = linhasQuery.error ? formatApiError(linhasQuery.error) : null
+
+  const handleLimitChange = (value: string) => {
+    setLimit(Number.parseInt(value, 10))
+    setPage(1)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[680px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Search className="w-5 h-5 text-primary" />
+            Buscar linha de produção
+          </DialogTitle>
+          <DialogDescription>
+            Registros cadastrados na tabela TBLINHA_PRODUCAO.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">{totalLabel}</span>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="linhasPageSize" className="text-sm font-medium">
+                Registros por página
+              </Label>
+              <Select value={String(limit)} onValueChange={handleLimitChange}>
+                <SelectTrigger id="linhasPageSize" className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={String(option)}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {errorMessage && (
+            <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+              {errorMessage}
+            </div>
+          )}
+
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full min-w-[520px] text-sm">
+              <thead className="bg-muted/60 text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">Código</th>
+                  <th className="px-3 py-2 text-left font-medium">Linha de produção</th>
+                  <th className="px-3 py-2 text-right font-medium">Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {linhasQuery.isLoading && (
+                  <tr>
+                    <td colSpan={3} className="px-3 py-8 text-center text-muted-foreground">
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Carregando linhas de produção...
+                      </span>
+                    </td>
+                  </tr>
+                )}
+
+                {!linhasQuery.isLoading && !errorMessage && linhas.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-3 py-8 text-center text-muted-foreground">
+                      Nenhuma linha de produção encontrada.
+                    </td>
+                  </tr>
+                )}
+
+                {!linhasQuery.isLoading && linhas.map((linha) => (
+                  <tr key={linha.linhaProducaoId} className="border-t">
+                    <td className="px-3 py-2 font-medium">{linha.linhaProducaoId}</td>
+                    <td className="px-3 py-2">{linha.linhaProducao || '-'}</td>
+                    <td className="px-3 py-2 text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => onSelect(linha)}
+                      >
+                        Selecionar
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <span className="text-sm text-muted-foreground">{pageLabel}</span>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+                disabled={!hasPreviousPage || linhasQuery.isFetching}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Anterior
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((currentPage) => currentPage + 1)}
+                disabled={!hasNextPage || linhasQuery.isFetching}
+              >
+                Próxima
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function ConfiguracaoEstacaoPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [linhaInput, setLinhaInput] = useState('')
   const [estacaoNome, setEstacaoNome] = useState('')
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+  const [isLinhasOpen, setIsLinhasOpen] = useState(false)
   const [isOpsOpen, setIsOpsOpen] = useState(false)
   const [testResult, setTestResult] = useState<ReferenceDataComOpId | null | undefined>(undefined)
 
@@ -345,6 +505,13 @@ export default function ConfiguracaoEstacaoPage() {
     } catch (error) {
       toast.error(formatApiError(error))
     }
+  }
+
+  const handleSelectLinha = (linha: LinhaProducao) => {
+    setLinhaInput(String(linha.linhaProducaoId))
+    setEstacaoNome(linha.linhaProducao)
+    setTestResult(undefined)
+    setIsLinhasOpen(false)
   }
 
   const handleSelectOp = (op: OpCadastrada) => {
@@ -429,8 +596,8 @@ export default function ConfiguracaoEstacaoPage() {
                         type="button"
                         variant="outline"
                         size="icon"
-                        onClick={() => setIsOpsOpen(true)}
-                        aria-label="Buscar OPs cadastradas"
+                        onClick={() => setIsLinhasOpen(true)}
+                        aria-label="Buscar linhas de produção"
                       >
                         <Search className="w-4 h-4" />
                       </Button>
@@ -534,6 +701,12 @@ export default function ConfiguracaoEstacaoPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LinhasProducaoDialog
+        open={isLinhasOpen}
+        onOpenChange={setIsLinhasOpen}
+        onSelect={handleSelectLinha}
+      />
 
       <OpsCadastradasDialog
         open={isOpsOpen}

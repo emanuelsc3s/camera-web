@@ -196,6 +196,110 @@ test('GET /api/configuracao-estacao bloqueia usuário sem perfil Administrador',
   }, { perfil: 'Operador' });
 });
 
+test('GET /api/configuracao-estacao/linhas-producao exige token válido', async () => {
+  await withTempServer(async ({ server }) => {
+    const result = await requestJson(
+      server.baseUrl,
+      'GET',
+      '/api/configuracao-estacao/linhas-producao',
+      undefined,
+      null,
+    );
+
+    assert.equal(result.status, 401);
+    assert.equal(result.body.code, 'NAO_AUTENTICADO');
+  });
+});
+
+test('GET /api/configuracao-estacao/linhas-producao lista linhas paginadas da TBLINHA_PRODUCAO', async () => {
+  await withTempServer(async ({ server, mockDatabase }) => {
+    const result = await requestJson(
+      server.baseUrl,
+      'GET',
+      '/api/configuracao-estacao/linhas-producao?page=2&limit=2',
+    );
+
+    const countQuery = mockDatabase.calls.find((call) => /SELECT\s+COUNT\(\*\) AS TOTAL\s+FROM TBLINHA_PRODUCAO/.test(call.sql));
+    const listQuery = mockDatabase.calls.find((call) => /SELECT\s+LINHAPRODUCAO_ID,\s+LINHAPRODUCAO\s+FROM TBLINHA_PRODUCAO/.test(call.sql));
+
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.body.pagination, {
+      page: 2,
+      limit: 2,
+      total: 3,
+      totalPages: 2,
+    });
+    assert.deepEqual(result.body.data, [{
+      linhaProducaoId: 8,
+      linhaProducao: 'LINHA_08_ENVASE',
+    }]);
+    assert.match(countQuery.sql, /COALESCE\(DELETADO, 'N'\) = 'N'/);
+    assert.match(listQuery.sql, /ORDER BY LINHAPRODUCAO_ID/);
+    assert.match(listQuery.sql, /ROWS \? TO \?/);
+    assert.deepEqual(listQuery.params, [3, 4]);
+  }, {
+    databaseHandler: async ({ sql }) => {
+      if (/FROM TBUSUARIO/.test(sql)) {
+        return [{
+          USUARIO_ID: 12,
+          NOME: 'Administrador',
+          PERFIL: 'Administrador',
+        }];
+      }
+
+      if (/SELECT\s+COUNT\(\*\) AS TOTAL\s+FROM TBLINHA_PRODUCAO/.test(sql)) {
+        return [{ TOTAL: 3 }];
+      }
+
+      if (/SELECT\s+LINHAPRODUCAO_ID,\s+LINHAPRODUCAO\s+FROM TBLINHA_PRODUCAO/.test(sql)) {
+        return [{
+          LINHAPRODUCAO_ID: 8,
+          LINHAPRODUCAO: 'LINHA_08_ENVASE',
+        }];
+      }
+
+      return [];
+    },
+  });
+});
+
+test('GET /api/configuracao-estacao/linhas-producao usa fallback quando descrição da linha está vazia', async () => {
+  await withTempServer(async ({ server }) => {
+    const result = await requestJson(
+      server.baseUrl,
+      'GET',
+      '/api/configuracao-estacao/linhas-producao',
+    );
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.data[0].linhaProducaoId, 7);
+    assert.equal(result.body.data[0].linhaProducao, 'LINHA_7');
+  }, {
+    databaseHandler: async ({ sql }) => {
+      if (/FROM TBUSUARIO/.test(sql)) {
+        return [{
+          USUARIO_ID: 12,
+          NOME: 'Administrador',
+          PERFIL: 'Administrador',
+        }];
+      }
+
+      if (/SELECT\s+COUNT\(\*\) AS TOTAL\s+FROM TBLINHA_PRODUCAO/.test(sql)) {
+        return [{ TOTAL: 1 }];
+      }
+
+      if (/SELECT\s+LINHAPRODUCAO_ID,\s+LINHAPRODUCAO\s+FROM TBLINHA_PRODUCAO/.test(sql)) {
+        return [{
+          LINHAPRODUCAO_ID: 7,
+          LINHAPRODUCAO: '   ',
+        }];
+      }
+
+      return [];
+    },
+  });
+});
+
 test('GET /api/configuracao-estacao/ops-cadastradas exige token válido', async () => {
   await withTempServer(async ({ server }) => {
     const result = await requestJson(
