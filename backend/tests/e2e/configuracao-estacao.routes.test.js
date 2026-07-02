@@ -462,7 +462,7 @@ test('GET /api/estacao/contexto retorna 409 quando estação não está configur
   });
 });
 
-test('GET /api/estacao/contexto busca OP ativa com START e ordem por OP_ID', async () => {
+test('GET /api/estacao/contexto busca OP ativa pela ultima inspeção CAM0 Fase 0', async () => {
   await withTempServer(async ({ server, mockDatabase }) => {
     const result = await requestJson(server.baseUrl, 'GET', '/api/estacao/contexto', undefined, null);
     const opQuery = mockDatabase.calls.find((call) => /FROM TBOP o/.test(call.sql));
@@ -470,9 +470,12 @@ test('GET /api/estacao/contexto busca OP ativa com START e ordem por OP_ID', asy
     assert.equal(result.status, 200);
     assert.equal(result.body.linhaProducaoId, 5);
     assert.equal(result.body.opAtiva.opId, 999);
-    assert.match(opQuery.sql, /o\."START" = 'S'/);
-    assert.match(opQuery.sql, /o\.LINHAPRODUCAO_ID = \?/);
-    assert.match(opQuery.sql, /ORDER BY o\.OP_ID DESC/);
+    assert.match(opQuery.sql, /JOIN TBINSPECAO_LAST l/);
+    assert.match(opQuery.sql, /ON l\.OP = o\.OP/);
+    assert.match(opQuery.sql, /l\.LINHAPRODUCAO_ID = \?/);
+    assert.match(opQuery.sql, /l\.CAMERA = 'CAM0'/);
+    assert.match(opQuery.sql, /l\.FASE = 'Fase 0'/);
+    assert.match(opQuery.sql, /ORDER BY l\.LAST_ID DESC/);
     assert.deepEqual(opQuery.params, [5]);
   }, {
     envContent: 'CAMERA_WEB_LINHA_PRODUCAO_ID=5\nCAMERA_WEB_ESTACAO_NOME=LINHA_05_MANUAL\n',

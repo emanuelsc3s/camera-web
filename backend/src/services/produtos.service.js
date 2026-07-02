@@ -45,10 +45,13 @@ async function getProductByGTIN(gtin) {
 async function getOpAtivaPorLinha(linhaProducaoId) {
   const sql = `
     ${BASE_SELECT_REFERENCIA}
+    JOIN TBINSPECAO_LAST l
+      ON l.OP = o.OP
     WHERE COALESCE(o.DELETADO, 'N') = 'N'
-      AND o.LINHAPRODUCAO_ID = ?
-      AND o."START" = 'S'
-    ORDER BY o.OP_ID DESC
+      AND l.LINHAPRODUCAO_ID = ?
+      AND l.CAMERA = 'CAM0'
+      AND l.FASE = 'Fase 0'
+    ORDER BY l.LAST_ID DESC
   `;
 
   const rows = await database.query(sql, [linhaProducaoId]);
