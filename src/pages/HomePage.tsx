@@ -97,6 +97,7 @@ export default function HomePage() {
   const temInspecaoEmAndamento = Boolean(lastPhoto) ||
     Object.values(inspectionStates).some((state) => state !== null)
   const todosItensInspecionados = Object.values(inspectionStates).every((state) => state !== null)
+  const podeAvaliarItens = Boolean(opAtiva && lastPhoto)
 
   useEffect(() => {
     if (!contextoQuery.isSuccess) {
@@ -134,6 +135,11 @@ export default function HomePage() {
       return
     }
 
+    if (!lastPhoto) {
+      toast.error('Capture uma foto antes de avaliar os itens.')
+      return
+    }
+
     // Se for GTIN ou Datamatrix, abre o modal
     if (item === 'gtin' || item === 'datamatrix') {
       setCurrentBarcodeType(item)
@@ -160,6 +166,11 @@ export default function HomePage() {
 
   // Callback para decisão do modal de código de barras
   const handleBarcodeDecision = (approved: boolean, value: string) => {
+    if (!lastPhoto) {
+      toast.error('Capture uma foto antes de avaliar os itens.')
+      return
+    }
+
     if (currentBarcodeType) {
       setInspectionStates(prev => ({
         ...prev,
@@ -435,7 +446,8 @@ export default function HomePage() {
                         key={key}
                         type="button"
                         onClick={() => toggleInspectionState(key)}
-                        disabled={!opAtiva}
+                        disabled={!podeAvaliarItens}
+                        title={!lastPhoto ? 'Capture uma foto antes de avaliar os itens' : undefined}
                         className={`
                           group relative flex min-h-[84px] sm:min-h-[88px] md:min-h-[90px] overflow-hidden rounded-md border
                           px-2.5 py-2.5 text-left transition-all duration-150 ease-out
