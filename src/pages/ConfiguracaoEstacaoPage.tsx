@@ -449,40 +449,6 @@ export default function ConfiguracaoEstacaoPage() {
                 </div>
               </section>
 
-              <section className="rounded-lg border bg-card shadow-sm">
-                <div className="border-b bg-muted/50 px-4 py-3">
-                  <h2 className="text-base font-semibold">Status atual</h2>
-                </div>
-                <div className="space-y-3 p-4">
-                  <div className="flex flex-wrap gap-2">
-                    <span className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-sm font-medium ${
-                      currentData?.configurado
-                        ? 'border-green-300 bg-green-50 text-green-800'
-                        : 'border-amber-300 bg-amber-50 text-amber-900'
-                    }`}>
-                      {currentData?.configurado ? (
-                        <CheckCircle2 className="w-4 h-4" />
-                      ) : (
-                        <AlertCircle className="w-4 h-4" />
-                      )}
-                      {currentData?.configurado ? 'Configurada' : 'Sem configuração'}
-                    </span>
-                    {currentData?.linhaProducaoId && (
-                      <span className="inline-flex items-center rounded-md border bg-muted/30 px-2.5 py-1 text-sm font-medium">
-                        Linha {currentData.linhaProducaoId}
-                      </span>
-                    )}
-                    {currentData?.estacaoNome && (
-                      <span className="inline-flex items-center rounded-md border bg-muted/30 px-2.5 py-1 text-sm font-medium">
-                        {currentData.estacaoNome}
-                      </span>
-                    )}
-                  </div>
-
-                  <OpAtivaResumo opAtiva={currentData?.opAtiva || null} />
-                </div>
-              </section>
-
               {testResult !== undefined && (
                 <section className="rounded-lg border bg-card shadow-sm">
                   <div className="border-b bg-muted/50 px-4 py-3">
